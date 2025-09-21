@@ -1,103 +1,475 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Calendar, Clock, DollarSign, TrendingUp, Plus } from 'lucide-react';
+import { HourEntry, Settings, WeekdayAverage, WEEKDAY_NAMES_ES } from '@/lib/types';
+
+interface AppData {
+  entries: HourEntry[];
+  settings: Settings;
+  weekday_averages: WeekdayAverage[];
+  total_hours: number;
+  entry_count: number;
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [data, setData] = useState<AppData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Form states
+  const [newEntry, setNewEntry] = useState({ date: '', hours: '' });
+  const [hourlyRate, setHourlyRate] = useState('');
+  const [bulkEntry, setBulkEntry] = useState({
+    start_date: '',
+    end_date: '',
+    hours: '',
+    weekdays: [] as string[],
+    mode: 'set' as 'set' | 'accumulate' | 'error',
+    skip_existing: false
+  });
+  const [fillAverage, setFillAverage] = useState({
+    start_date: '',
+    end_date: '',
+    overwrite: false
+  });
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch('/api/status');
+      const result = await response.json();
+      
+      if (result.status === 'ok') {
+        setData(result.data);
+      } else {
+        setError(result.message);
+      }
+    } catch {
+      setError('Error al cargar los datos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const addEntry = async () => {
+    if (!newEntry.date || !newEntry.hours) return;
+    
+    try {
+      const response = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: newEntry.date,
+          hours: parseFloat(newEntry.hours)
+        })
+      });
+      
+      const result = await response.json();
+      if (result.status === 'ok') {
+        setNewEntry({ date: '', hours: '' });
+        fetchData();
+      } else {
+        alert(result.message);
+      }
+    } catch {
+      alert('Error al agregar entrada');
+    }
+  };
+
+  const updateRate = async () => {
+    if (!hourlyRate) return;
+    
+    try {
+      const response = await fetch('/api/settings/rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rate: parseFloat(hourlyRate) })
+      });
+      
+      const result = await response.json();
+      if (result.status === 'ok') {
+        setHourlyRate('');
+        fetchData();
+      } else {
+        alert(result.message);
+      }
+    } catch {
+      alert('Error al actualizar tarifa');
+    }
+  };
+
+  const addBulkEntries = async () => {
+    if (!bulkEntry.start_date || !bulkEntry.end_date || !bulkEntry.hours) return;
+    
+    try {
+      const response = await fetch('/api/entries/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...bulkEntry,
+          hours: parseFloat(bulkEntry.hours)
+        })
+      });
+      
+      const result = await response.json();
+      if (result.status === 'ok') {
+        setBulkEntry({
+          start_date: '',
+          end_date: '',
+          hours: '',
+          weekdays: [],
+          mode: 'set',
+          skip_existing: false
+        });
+        fetchData();
+        alert(result.message);
+      } else {
+        alert(result.message);
+      }
+    } catch {
+      alert('Error al agregar entradas masivas');
+    }
+  };
+
+  const fillWithAverages = async () => {
+    if (!fillAverage.start_date || !fillAverage.end_date) return;
+    
+    try {
+      const response = await fetch('/api/entries/fill-average', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fillAverage)
+      });
+      
+      const result = await response.json();
+      if (result.status === 'ok') {
+        setFillAverage({ start_date: '', end_date: '', overwrite: false });
+        fetchData();
+        alert(result.message);
+      } else {
+        alert(result.message);
+      }
+    } catch {
+      alert('Error al llenar con promedios');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 text-lg">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const totalEarnings = data?.settings.hourly_rate ? data.total_hours * data.settings.hourly_rate : 0;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-gray-800 to-gray-700 text-white py-6">
+        <div className="container mx-auto px-4">
+          <h1 className="text-3xl font-bold mb-2">Horas Freelance</h1>
+          <p className="text-gray-300">Registra jornadas, rellena olvidos con promedios y calcula el ingreso estimado.</p>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 py-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <Clock className="h-8 w-8 text-blue-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Horas</p>
+                <p className="text-2xl font-bold text-gray-900">{data?.total_hours.toFixed(1) || '0.0'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <Calendar className="h-8 w-8 text-green-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Días Registrados</p>
+                <p className="text-2xl font-bold text-gray-900">{data?.entry_count || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <DollarSign className="h-8 w-8 text-yellow-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Tarifa/Hora</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  ${data?.settings.hourly_rate?.toFixed(2) || '0.00'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <TrendingUp className="h-8 w-8 text-purple-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Ingresos Estimados</p>
+                <p className="text-2xl font-bold text-gray-900">${totalEarnings.toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Column */}
+          <div className="space-y-6">
+            {/* Add Single Entry */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center">
+                <Plus className="h-5 w-5 mr-2" />
+                Registrar Horas
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={newEntry.date}
+                    onChange={(e) => setNewEntry({...newEntry, date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Horas</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={newEntry.hours}
+                    onChange={(e) => setNewEntry({...newEntry, hours: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={addEntry}
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Agregar Entrada
+                </button>
+              </div>
+            </div>
+
+            {/* Set Hourly Rate */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center">
+                <DollarSign className="h-5 w-5 mr-2" />
+                Configurar Tarifa
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tarifa por Hora ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(e.target.value)}
+                    placeholder={data?.settings.hourly_rate?.toString() || ''}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={updateRate}
+                  className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Actualizar Tarifa
+                </button>
+              </div>
+            </div>
+
+            {/* Weekday Averages */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Promedios por Día</h3>
+              <div className="space-y-2">
+                {WEEKDAY_NAMES_ES.map((dayName, index) => {
+                  const average = data?.weekday_averages.find(avg => avg.weekday === index);
+                  return (
+                    <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                      <span className="capitalize font-medium">{dayName}</span>
+                      <span className="text-gray-600">
+                        {average ? `${average.average}h (${average.entry_count} días)` : 'Sin datos'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column */}
+          <div className="space-y-6">
+            {/* Bulk Add */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Agregar Rango de Fechas</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Inicio</label>
+                    <input
+                      type="date"
+                      value={bulkEntry.start_date}
+                      onChange={(e) => setBulkEntry({...bulkEntry, start_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Fin</label>
+                    <input
+                      type="date"
+                      value={bulkEntry.end_date}
+                      onChange={(e) => setBulkEntry({...bulkEntry, end_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Horas por día</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={bulkEntry.hours}
+                    onChange={(e) => setBulkEntry({...bulkEntry, hours: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Días de la semana (opcional)</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {WEEKDAY_NAMES_ES.map((day, index) => (
+                      <label key={index} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={bulkEntry.weekdays.includes(day)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setBulkEntry({...bulkEntry, weekdays: [...bulkEntry.weekdays, day]});
+                            } else {
+                              setBulkEntry({...bulkEntry, weekdays: bulkEntry.weekdays.filter(d => d !== day)});
+                            }
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm capitalize">{day.slice(0, 3)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={bulkEntry.skip_existing}
+                      onChange={(e) => setBulkEntry({...bulkEntry, skip_existing: e.target.checked})}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Omitir existentes</span>
+                  </label>
+                </div>
+                <button
+                  onClick={addBulkEntries}
+                  className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors"
+                >
+                  Agregar Rango
+                </button>
+              </div>
+            </div>
+
+            {/* Fill with Averages */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Llenar con Promedios</h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Inicio</label>
+                    <input
+                      type="date"
+                      value={fillAverage.start_date}
+                      onChange={(e) => setFillAverage({...fillAverage, start_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Fin</label>
+                    <input
+                      type="date"
+                      value={fillAverage.end_date}
+                      onChange={(e) => setFillAverage({...fillAverage, end_date: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={fillAverage.overwrite}
+                      onChange={(e) => setFillAverage({...fillAverage, overwrite: e.target.checked})}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Sobrescribir existentes</span>
+                  </label>
+                </div>
+                <button
+                  onClick={fillWithAverages}
+                  className="w-full bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 transition-colors"
+                >
+                  Llenar con Promedios
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Entries */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Entradas Recientes</h3>
+              <div className="max-h-64 overflow-y-auto">
+                {data?.entries.slice(-10).reverse().map((entry, index) => (
+                  <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                    <span className="font-medium">{entry.date}</span>
+                    <span className="text-gray-600">{entry.hours}h</span>
+                  </div>
+                ))}
+                {!data?.entries.length && (
+                  <p className="text-gray-500 text-center py-4">No hay entradas registradas</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
