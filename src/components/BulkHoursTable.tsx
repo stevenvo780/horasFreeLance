@@ -192,7 +192,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               viewMode === 'list' 
                 ? 'bg-blue-600 text-white' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
             }`}
           >
             Lista
@@ -202,7 +202,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               viewMode === 'bulk' 
                 ? 'bg-blue-600 text-white' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
             }`}
           >
             Asignación Masiva
@@ -249,7 +249,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
               setStartDate('');
               setEndDate('');
             }}
-            className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-200 transition-colors"
+            className="w-full bg-gray-100 text-gray-900 py-2 px-4 rounded-md hover:bg-gray-200 transition-colors"
           >
             Limpiar Filtros
           </button>
@@ -272,19 +272,19 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           <div className="bg-gray-50 p-4 rounded-md grid grid-cols-4 gap-4 mb-6">
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{stats.totalDays}</div>
-              <div className="text-sm text-gray-800">Total registros</div>
+              <div className="text-sm text-gray-900">Total registros</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{formatHours(stats.totalHours)}</div>
-              <div className="text-sm text-gray-800">Total horas</div>
+              <div className="text-sm text-gray-900">Total horas</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{formatHours(stats.avgHours)}</div>
-              <div className="text-sm text-gray-800">Promedio horas/día</div>
+              <div className="text-sm text-gray-900">Promedio horas/día</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{totalPages}</div>
-              <div className="text-sm text-gray-800">Páginas</div>
+              <div className="text-sm text-gray-900">Páginas</div>
             </div>
           </div>
 
@@ -296,7 +296,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                <label className="block text-sm font-medium text-gray-900 mb-1">Fecha</label>
                 <input
                   type="date"
                   value={newEntry.date}
@@ -305,7 +305,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Horas</label>
+                <label className="block text-sm font-medium text-gray-900 mb-1">Horas</label>
                 <input
                   type="number"
                   step="0.5"
@@ -333,10 +333,10 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
             <table className="w-full border border-gray-200 rounded-md">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Fecha</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Día</th>
-                  <th className="text-center py-3 px-4 font-medium text-gray-700">Horas</th>
-                  <th className="text-center py-3 px-4 font-medium text-gray-700">Acciones</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">Fecha</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">Día</th>
+                  <th className="text-center py-3 px-4 font-medium text-gray-900">Horas</th>
+                  <th className="text-center py-3 px-4 font-medium text-gray-900">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -384,7 +384,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                           <button
                             onClick={handleCancelEdit}
                             disabled={loading}
-                            className="text-gray-800 hover:text-gray-900 disabled:text-gray-400"
+                            className="text-gray-900 hover:text-gray-900 disabled:text-gray-400"
                             title="Cancelar"
                           >
                             <X className="h-4 w-4" />
@@ -420,7 +420,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex justify-between items-center mt-6">
-              <div className="text-sm text-gray-800">
+              <div className="text-sm text-gray-900">
                 Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, filteredEntries.length)} de {filteredEntries.length} registros
               </div>
               
@@ -433,7 +433,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 
-                <span className="px-3 py-1 text-sm text-gray-800">
+                <span className="px-3 py-1 text-sm text-gray-900">
                   Página {currentPage} de {totalPages}
                 </span>
                 
@@ -449,7 +449,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           )}
 
           {filteredEntries.length === 0 && (
-            <div className="text-center py-8 text-gray-700">
+            <div className="text-center py-8 text-gray-900">
               No hay registros que coincidan con los filtros seleccionados
             </div>
           )}
@@ -578,7 +578,7 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
         <h4 className="text-lg font-semibold">Asignación Masiva de Horas</h4>
         <button
           onClick={onBack}
-          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+          className="px-4 py-2 bg-gray-100 text-gray-900 rounded-md hover:bg-gray-200 transition-colors"
         >
           ← Volver a Lista
         </button>
@@ -587,7 +587,7 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
       {/* Controles */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Horas por defecto</label>
+          <label className="block text-sm font-medium text-gray-900 mb-1">Horas por defecto</label>
           <input
             type="number"
             step="0.5"
@@ -637,15 +637,15 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
         <div className="bg-gray-50 p-4 rounded-md grid grid-cols-3 gap-4">
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900">{workingDays}</div>
-            <div className="text-sm text-gray-800">Días con horas</div>
+            <div className="text-sm text-gray-900">Días con horas</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900">{formatHours(totalHours)}</div>
-            <div className="text-sm text-gray-800">Total horas</div>
+            <div className="text-sm text-gray-900">Total horas</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900">{dateRows.length}</div>
-            <div className="text-sm text-gray-800">Días en rango</div>
+            <div className="text-sm text-gray-900">Días en rango</div>
           </div>
         </div>
       )}
@@ -656,10 +656,10 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
           <table className="w-full">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Fecha</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-700">Día</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Horas</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-700">Estado</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-900">Fecha</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-900">Día</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-900">Horas</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-900">Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -724,7 +724,7 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
       )}
 
       {!startDate || !endDate ? (
-        <div className="text-center py-8 text-gray-700">
+        <div className="text-center py-8 text-gray-900">
           Por favor selecciona un rango de fechas en los filtros superiores para generar la tabla de asignación masiva
         </div>
       ) : null}
