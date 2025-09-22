@@ -144,22 +144,53 @@ export default function Dashboard() {
     }
     
     try {
-      // Usar el endpoint de bulk entries pero enviando directamente las entradas
-      const promises = entries.map(entry => 
-        fetch('/api/entries', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({
-            ...entry,
-            company_id: selectedCompany.id
-          })
-        })
-      );
+      // Procesar cada entrada individualmente con mejor manejo de errores
+      const results = [];
+      let successCount = 0;
+      let errorCount = 0;
       
-      await Promise.all(promises);
-      fetchData();
+      for (const entry of entries) {
+        try {
+          const response = await fetch('/api/entries', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+              date: entry.date,
+              hours: entry.hours,
+              company_id: selectedCompany.id
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok && data.status === 'ok') {
+            successCount++;
+          } else {
+            console.error('Error en entrada individual:', data);
+            errorCount++;
+          }
+          
+          results.push({ entry, response: data, success: response.ok });
+        } catch (error) {
+          console.error('Error procesando entrada:', entry, error);
+          errorCount++;
+          results.push({ entry, error, success: false });
+        }
+      }
+      
+      console.log(`Resultados del guardado masivo: ${successCount} exitosos, ${errorCount} errores`);
+      
+      if (errorCount > 0) {
+        throw new Error(`Se guardaron ${successCount} de ${entries.length} entradas. ${errorCount} fallaron.`);
+      }
+      
+      await fetchData();
     } catch (error) {
-      throw new Error('Error al guardar entradas masivas');
+      console.error('Error en handleBulkSave:', error);
+      throw error;
     }
   };
 

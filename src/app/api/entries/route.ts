@@ -50,20 +50,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify company ownership
-    const company = await db.getCompanyById(company_id, userId);
-    if (!company) {
+    const company = await db.getCompanyById(company_id);
+    if (!company || company.user_id !== userId) {
       return NextResponse.json({
         status: 'error',
         message: 'Empresa no encontrada o sin permisos'
       } as ApiResponse, { status: 404 });
     }
 
-    const change = await db.addEntry(date, hours, company_id, userId, mode);
+    const entryId = await db.addEntry(date, hours, '', company_id);
 
     const response: ApiResponse = {
       status: 'ok',
-      message: `Entrada ${change.old_value ? 'actualizada' : 'creada'} para ${date}`,
-      changes: [change]
+      message: `Entrada creada para ${date}`,
+      changes: [{
+        date,
+        old_value: 0,
+        new_value: hours
+      }]
     };
 
     return NextResponse.json(response);
