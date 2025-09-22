@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, initializeDatabase } from '@/lib/db';
+import { getDatabase, initializeDatabase } from '@/lib/turso-db';
 import { ApiResponse, BulkAddRequest, WEEKDAY_ALIASES } from '@/lib/types';
 
 function parseWeekdays(weekdayStrings: string[]): number[] {
@@ -118,7 +118,9 @@ export async function POST(request: NextRequest) {
 
     for (const entry of entriesToAdd) {
       try {
-        const change = await db.addEntry(entry.date, entry.hours, entry.mode);
+        // Convertir el mode de bulk a mode de addEntry
+        const addMode = entry.mode === 'accumulate' ? 'add' : 'replace';
+        const change = await db.addEntry(entry.date, entry.hours, addMode);
         changes.push(change);
       } catch (error) {
         if (skip_existing && error instanceof Error && error.message.includes('Ya existe')) {

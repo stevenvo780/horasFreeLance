@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, initializeDatabase } from '@/lib/db';
+import { getDatabase, initializeDatabase } from '@/lib/turso-db';
 import { ApiResponse, FillAverageRequest } from '@/lib/types';
 
 export async function POST(request: NextRequest) {

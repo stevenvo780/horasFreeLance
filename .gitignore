@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local SQLite database (replaced by Turso)
+data/
+scripts/
+
+# Playwright screenshots
+.playwright-mcp/

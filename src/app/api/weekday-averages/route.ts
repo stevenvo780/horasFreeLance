@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import { getDatabase, initializeDatabase } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { getDatabase, initializeDatabase } from '@/lib/turso-db';
 import { ApiResponse } from '@/lib/types';
 
 export async function GET() {
