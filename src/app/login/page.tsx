@@ -58,7 +58,7 @@ export default function LoginPage() {
             <h2 className="mt-6 text-3xl font-bold text-gray-900">
               Iniciar sesión
             </h2>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-gray-800">
               Accede a tu sistema de horas
             </p>
           </div>
@@ -72,7 +72,7 @@ export default function LoginPage() {
 
             <div className="space-y-5">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-900">
                   Email
                 </label>
                 <div className="mt-1 relative">
@@ -94,7 +94,7 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-900">
                   Contraseña
                 </label>
                 <div className="mt-1 relative">
@@ -138,7 +138,7 @@ export default function LoginPage() {
             </div>
 
             <div className="text-center">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-800">
                 ¿No tienes una cuenta?{' '}
                 <Link
                   href="/register"

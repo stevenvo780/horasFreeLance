@@ -168,7 +168,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
+          <p className="mt-4 text-gray-800">Cargando...</p>
         </div>
       </div>
     );
@@ -183,7 +183,7 @@ export default function Dashboard() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
+          <p className="mt-4 text-gray-800">Cargando...</p>
         </div>
       </div>
     );
@@ -212,7 +212,7 @@ export default function Dashboard() {
     switch (trend) {
       case 'up': return <ArrowUp className="h-4 w-4 text-green-500" />;
       case 'down': return <ArrowDown className="h-4 w-4 text-red-500" />;
-      default: return <Minus className="h-4 w-4 text-gray-500" />;
+      default: return <Minus className="h-4 w-4 text-gray-700" />;
     }
   };
 
@@ -224,7 +224,7 @@ export default function Dashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold mb-2">Panel de Control</h1>
-              <p className="text-gray-300">
+              <p className="text-gray-800">
                 Bienvenido, {user?.first_name} {user?.last_name}
                 {selectedCompany && (
                   <span className="ml-2 text-blue-200">• {selectedCompany.name}</span>
@@ -251,7 +251,7 @@ export default function Dashboard() {
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'dashboard'
                   ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-700 hover:text-gray-800 hover:border-gray-300'
               }`}
             >
               Panel de Control
@@ -261,7 +261,7 @@ export default function Dashboard() {
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'bulk-table'
                   ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-700 hover:text-gray-800 hover:border-gray-300'
               }`}
             >
               Gestión de Registros
@@ -280,7 +280,7 @@ export default function Dashboard() {
                   <div className="flex items-center">
                     <Clock className="h-8 w-8 text-blue-600" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Horas</p>
+                      <p className="text-sm font-medium text-gray-800">Total Horas</p>
                       <p className="text-2xl font-bold text-gray-900">{formatHours(data?.total_hours || 0)}</p>
                     </div>
                   </div>
@@ -292,7 +292,7 @@ export default function Dashboard() {
                   <div className="flex items-center">
                     <Calendar className="h-8 w-8 text-green-600" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Días Registrados</p>
+                      <p className="text-sm font-medium text-gray-800">Días Registrados</p>
                       <p className="text-2xl font-bold text-gray-900">{data?.entry_count || 0}</p>
                     </div>
                   </div>
@@ -304,7 +304,7 @@ export default function Dashboard() {
                   <div className="flex items-center">
                     <DollarSign className="h-8 w-8 text-yellow-600" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Tarifa/Hora</p>
+                      <p className="text-sm font-medium text-gray-800">Tarifa/Hora</p>
                       <p className="text-2xl font-bold text-gray-900">
                         {formatPrice(selectedCompany?.hourly_rate || 0, true)}
                       </p>
@@ -318,7 +318,7 @@ export default function Dashboard() {
                   <div className="flex items-center">
                     <TrendingUp className="h-8 w-8 text-purple-600" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
+                      <p className="text-sm font-medium text-gray-800">Ingresos Totales</p>
                       <p className="text-2xl font-bold text-gray-900">{formatPrice(totalEarnings)}</p>
                     </div>
                   </div>
@@ -337,15 +337,15 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Esta semana</span>
+                      <span className="text-gray-800">Esta semana</span>
                       <span className="font-bold text-blue-600">{formatHours(analytics.thisWeek.totalHours)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Semana pasada</span>
-                      <span className="font-bold text-gray-500">{formatHours(analytics.lastWeek.totalHours)}</span>
+                      <span className="text-gray-800">Semana pasada</span>
+                      <span className="font-bold text-gray-700">{formatHours(analytics.lastWeek.totalHours)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-gray-600">Diferencia</span>
+                      <span className="text-gray-800">Diferencia</span>
                       <span className={`font-bold ${
                         analytics.weeklyTrend === 'up' ? 'text-green-600' : 
                         analytics.weeklyTrend === 'down' ? 'text-red-600' : 'text-gray-600'
@@ -354,7 +354,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Días trabajados</span>
+                      <span className="text-gray-800">Días trabajados</span>
                       <span className="font-medium">
                         {analytics.thisWeek.workingDays} de 7 días
                       </span>
@@ -370,24 +370,24 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Este mes</span>
+                      <span className="text-gray-800">Este mes</span>
                       <span className="font-bold text-blue-600">{formatHours(analytics.thisMonth.totalHours)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Mes pasado</span>
-                      <span className="font-bold text-gray-500">{formatHours(analytics.lastMonth.totalHours)}</span>
+                      <span className="text-gray-800">Mes pasado</span>
+                      <span className="font-bold text-gray-700">{formatHours(analytics.lastMonth.totalHours)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-gray-600">Diferencia</span>
+                      <span className="text-gray-800">Diferencia</span>
                       <span className={`font-bold ${
                         analytics.monthlyTrend === 'up' ? 'text-green-600' : 
-                        analytics.monthlyTrend === 'down' ? 'text-red-600' : 'text-gray-600'
+                        analytics.monthlyTrend === 'down' ? 'text-red-600' : 'text-gray-800'
                       }`}>
                         {formatHoursDiff(analytics.thisMonth.totalHours - analytics.lastMonth.totalHours)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Promedio por día trabajado</span>
+                      <span className="text-gray-800">Promedio por día trabajado</span>
                       <span className="font-medium">
                         {formatHours(analytics.thisMonth.avgHoursPerWorkingDay)}
                       </span>
@@ -545,19 +545,19 @@ export default function Dashboard() {
                   {analytics && (
                     <>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Ingresos esta semana</span>
+                        <span className="text-sm text-gray-800">Ingresos esta semana</span>
                         <span className="font-bold text-green-600">
                           {formatPrice(analytics.thisWeek.totalEarnings)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Ingresos este mes</span>
+                        <span className="text-sm text-gray-800">Ingresos este mes</span>
                         <span className="font-bold text-blue-600">
                           {formatPrice(analytics.thisMonth.totalEarnings)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center pt-2 border-t">
-                        <span className="text-sm text-gray-600">Promedio diario</span>
+                        <span className="text-sm text-gray-800">Promedio diario</span>
                         <span className="font-medium">
                           {formatHours(analytics.thisMonth.avgHoursPerWorkingDay)}
                         </span>
@@ -566,7 +566,7 @@ export default function Dashboard() {
                   )}
                   {data && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Total registros</span>
+                      <span className="text-sm text-gray-800">Total registros</span>
                       <span className="font-medium">{data.entry_count}</span>
                     </div>
                   )}

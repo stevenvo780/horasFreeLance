@@ -82,7 +82,7 @@ export default function RegisterPage() {
             <h2 className="mt-6 text-3xl font-bold text-gray-900">
               Crear cuenta
             </h2>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-gray-800">
               Regístrate para comenzar a trackear tus horas
             </p>
           </div>
@@ -97,7 +97,7 @@ export default function RegisterPage() {
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="first_name" className="block text-sm font-medium text-gray-900">
                     Nombre
                   </label>
                   <div className="mt-1 relative">
@@ -118,7 +118,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="last_name" className="block text-sm font-medium text-gray-900">
                     Apellido
                   </label>
                   <div className="mt-1">
@@ -137,7 +137,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-900">
                   Email
                 </label>
                 <div className="mt-1 relative">
@@ -159,7 +159,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-900">
                   Contraseña
                 </label>
                 <div className="mt-1 relative">
@@ -192,7 +192,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-900">
                   Confirmar contraseña
                 </label>
                 <div className="mt-1 relative">
@@ -236,7 +236,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="text-center">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-800">
                 ¿Ya tienes una cuenta?{' '}
                 <Link
                   href="/login"

@@ -213,7 +213,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
       {/* Filtros */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Inicio</label>
+          <label className="block text-sm font-medium text-gray-900 mb-1">Fecha Inicio</label>
           <input
             type="date"
             value={startDate}
@@ -222,7 +222,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Fin</label>
+          <label className="block text-sm font-medium text-gray-900 mb-1">Fecha Fin</label>
           <input
             type="date"
             value={endDate}
@@ -231,7 +231,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Registros por página</label>
+          <label className="block text-sm font-medium text-gray-900 mb-1">Registros por página</label>
           <select
             value={itemsPerPage}
             onChange={(e) => setItemsPerPage(parseInt(e.target.value))}
@@ -272,19 +272,19 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           <div className="bg-gray-50 p-4 rounded-md grid grid-cols-4 gap-4 mb-6">
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{stats.totalDays}</div>
-              <div className="text-sm text-gray-600">Total registros</div>
+              <div className="text-sm text-gray-800">Total registros</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{formatHours(stats.totalHours)}</div>
-              <div className="text-sm text-gray-600">Total horas</div>
+              <div className="text-sm text-gray-800">Total horas</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{formatHours(stats.avgHours)}</div>
-              <div className="text-sm text-gray-600">Promedio horas/día</div>
+              <div className="text-sm text-gray-800">Promedio horas/día</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{totalPages}</div>
-              <div className="text-sm text-gray-600">Páginas</div>
+              <div className="text-sm text-gray-800">Páginas</div>
             </div>
           </div>
 
@@ -384,7 +384,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                           <button
                             onClick={handleCancelEdit}
                             disabled={loading}
-                            className="text-gray-600 hover:text-gray-800 disabled:text-gray-400"
+                            className="text-gray-800 hover:text-gray-900 disabled:text-gray-400"
                             title="Cancelar"
                           >
                             <X className="h-4 w-4" />
@@ -420,7 +420,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex justify-between items-center mt-6">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-800">
                 Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, filteredEntries.length)} de {filteredEntries.length} registros
               </div>
               
@@ -433,7 +433,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 
-                <span className="px-3 py-1 text-sm text-gray-600">
+                <span className="px-3 py-1 text-sm text-gray-800">
                   Página {currentPage} de {totalPages}
                 </span>
                 
@@ -449,7 +449,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           )}
 
           {filteredEntries.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-700">
               No hay registros que coincidan con los filtros seleccionados
             </div>
           )}
@@ -637,15 +637,15 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
         <div className="bg-gray-50 p-4 rounded-md grid grid-cols-3 gap-4">
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900">{workingDays}</div>
-            <div className="text-sm text-gray-600">Días con horas</div>
+            <div className="text-sm text-gray-800">Días con horas</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900">{formatHours(totalHours)}</div>
-            <div className="text-sm text-gray-600">Total horas</div>
+            <div className="text-sm text-gray-800">Total horas</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-bold text-gray-900">{dateRows.length}</div>
-            <div className="text-sm text-gray-600">Días en rango</div>
+            <div className="text-sm text-gray-800">Días en rango</div>
           </div>
         </div>
       )}
@@ -724,7 +724,7 @@ function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRef
       )}
 
       {!startDate || !endDate ? (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-gray-700">
           Por favor selecciona un rango de fechas en los filtros superiores para generar la tabla de asignación masiva
         </div>
       ) : null}

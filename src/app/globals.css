@@ -27,93 +27,12 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Estilos específicos para mejorar el contraste de texto en inputs y elementos de formulario */
+/* Estilos básicos para inputs - Solo lo esencial */
 input, textarea, select {
-  color: #1f2937 !important; /* Gris oscuro para texto de inputs */
-  background-color: #ffffff !important; /* Fondo blanco para inputs */
+  color: #1f2937;
+  background-color: #ffffff;
 }
 
 input::placeholder, textarea::placeholder {
-  color: #6b7280 !important; /* Gris medio para placeholders */
-}
-
-/* Estilos para modo oscuro */
-@media (prefers-color-scheme: dark) {
-  input, textarea, select {
-    color: #f9fafb !important; /* Texto claro en modo oscuro */
-    background-color: #374151 !important; /* Fondo gris oscuro para inputs en modo oscuro */
-  }
-  
-  input::placeholder, textarea::placeholder {
-    color: #9ca3af !important; /* Gris claro para placeholders en modo oscuro */
-  }
-}
-
-/* Asegurar que el texto de los labels tenga buen contraste */
-label {
-  color: #374151;
-}
-
-@media (prefers-color-scheme: dark) {
-  label {
-    color: #d1d5db;
-  }
-}
-
-/* Mejorar contraste en botones de texto */
-button {
-  color: inherit;
-}
-
-/* Asegurar contraste en texto de elementos específicos */
-.text-gray-400 {
-  color: #9ca3af !important;
-}
-
-.text-gray-500 {
-  color: #374151 !important; /* Cambiado de gris claro a gris oscuro */
-}
-
-.text-gray-600 {
-  color: #1f2937 !important; /* Cambiado de gris medio a gris muy oscuro */
-}
-
-.text-gray-700 {
-  color: #111827 !important; /* Cambiado de gris oscuro a casi negro */
-}
-
-.text-gray-900 {
-  color: #111827 !important;
-}
-
-/* Corrección específica para texto gris claro en header */
-.text-gray-300 {
-  color: #d1d5db !important; /* Mantener claro para headers oscuros */
-}
-
-/* En modo oscuro, ajustar los grises para mejor contraste */
-@media (prefers-color-scheme: dark) {
-  .text-gray-400 {
-    color: #9ca3af !important;
-  }
-  
-  .text-gray-500 {
-    color: #e5e7eb !important;
-  }
-  
-  .text-gray-600 {
-    color: #f3f4f6 !important;
-  }
-  
-  .text-gray-700 {
-    color: #f9fafb !important;
-  }
-  
-  .text-gray-900 {
-    color: #f9fafb !important;
-  }
-  
-  .text-gray-300 {
-    color: #9ca3af !important;
-  }
+  color: #6b7280;
 }
