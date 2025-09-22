@@ -12,6 +12,7 @@ export interface Company {
   id?: number;
   name: string;
   hourly_rate: number;
+  billing_cycle_day: number; // Day of month when billing cycle starts (1-31)
   user_id: number;
   created_at?: string;
 }
@@ -115,4 +116,22 @@ export interface CreateCompanyRequest {
   name: string;
   description?: string;
   hourly_rate?: number;
+  billing_cycle_day?: number;
+}
+
+// Billing cycle and earnings statistics
+export interface BillingCycleStats {
+  cycle_start: string; // ISO date
+  cycle_end: string; // ISO date
+  total_hours: number;
+  total_earnings: number;
+  days_worked: number;
+  average_hours_per_day: number;
+}
+
+export interface MonthlyEarnings {
+  month: string; // YYYY-MM format
+  total_hours: number;
+  total_earnings: number;
+  billing_cycles: BillingCycleStats[];
 }

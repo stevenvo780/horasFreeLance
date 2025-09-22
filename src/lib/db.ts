@@ -33,6 +33,7 @@ class Database {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           hourly_rate REAL NOT NULL DEFAULT 0,
+          billing_cycle_day INTEGER NOT NULL DEFAULT 1,
           user_id INTEGER NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
