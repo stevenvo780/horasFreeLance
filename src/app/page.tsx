@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Calendar, Clock, DollarSign, TrendingUp, TrendingDown, 
-  BarChart3, AlertCircle, CheckCircle, ExternalLink,
+  BarChart3, AlertCircle, CheckCircle,
   Settings, Target, Zap, ArrowUp, ArrowDown, Minus, LogOut,
   Building2, Plus, Users
 } from 'lucide-react';
@@ -232,11 +232,11 @@ export default function Dashboard() {
               </p>
             </div>
             <button
-              onClick={() => setActiveTab('bulk-table')}
-              className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              onClick={logout}
+              className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             >
-              <ExternalLink className="h-5 w-5 mr-2" />
-              Ir a Gestión de Registros
+              <LogOut className="h-5 w-5 mr-2" />
+              Cerrar Sesión
             </button>
           </div>
         </div>
