@@ -1,39 +1,54 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Calendar, Clock, DollarSign, TrendingUp, TrendingDown, 
   BarChart3, AlertCircle, CheckCircle, ExternalLink,
-  Settings, Target, Zap, ArrowUp, ArrowDown, Minus
+  Settings, Target, Zap, ArrowUp, ArrowDown, Minus, LogOut,
+  Building2, Plus, Users
 } from 'lucide-react';
-import { HourEntry, Settings as AppSettings, WeekdayAverage } from '@/lib/types';
+import { HourEntry, Company, WeekdayAverage } from '@/lib/types';
 import { formatPrice, formatHours } from '@/lib/formatters';
 import { 
   analyzeTrends, getMissingDaysThisWeek, getProductivityByWeekday, 
   formatHoursDiff, formatPercentageDiff, TrendAnalysis 
 } from '@/lib/analytics';
+import { useAuth } from '@/hooks/useAuth';
 import BulkHoursTable from '@/components/BulkHoursTable';
 
 interface AppData {
   entries: HourEntry[];
-  settings: AppSettings;
+  companies: Company[];
   weekday_averages: WeekdayAverage[];
   total_hours: number;
   entry_count: number;
 }
 
 export default function Dashboard() {
+  const { user, token, logout, getAuthHeaders, isAuthenticated, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table'>('dashboard');
-  const [hourlyRate, setHourlyRate] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [showNewCompanyForm, setShowNewCompanyForm] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyRate, setNewCompanyRate] = useState('');
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   // Calcular analytics con useMemo para optimizar rendimiento
   const analytics = useMemo(() => {
-    if (!data?.entries || !data?.settings.hourly_rate) return null;
-    return analyzeTrends(data.entries, data.settings.hourly_rate);
-  }, [data?.entries, data?.settings.hourly_rate]);
+    if (!data?.entries || !selectedCompany?.hourly_rate) return null;
+    return analyzeTrends(data.entries, selectedCompany.hourly_rate);
+  }, [data?.entries, selectedCompany?.hourly_rate]);
 
   const missingDays = useMemo(() => {
     if (!data?.entries) return [];
@@ -47,11 +62,30 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     try {
-      const response = await fetch('/api/status');
+      if (!isAuthenticated) return;
+      
+      const url = selectedCompany 
+        ? `/api/status?company_id=${selectedCompany.id}`
+        : '/api/status';
+        
+      const response = await fetch(url, {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+      
       const result = await response.json();
       
       if (result.status === 'ok') {
         setData(result.data);
+        
+        // Set default company if none selected and companies exist
+        if (!selectedCompany && result.data.companies?.length > 0) {
+          setSelectedCompany(result.data.companies[0]);
+        }
       } else {
         setError(result.message);
       }
@@ -63,39 +97,62 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (isAuthenticated) {
+      fetchData();
+    }
+  }, [isAuthenticated, selectedCompany]);
 
-  const updateRate = async () => {
-    if (!hourlyRate) return;
+  const createCompany = async () => {
+    if (!newCompanyName) return;
     
     try {
-      const response = await fetch('/api/settings/rate', {
+      const response = await fetch('/api/companies', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rate: parseFloat(hourlyRate) })
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          name: newCompanyName,
+          hourly_rate: newCompanyRate ? parseFloat(newCompanyRate) : undefined
+        })
       });
       
-      const result = await response.json();
-      if (result.status === 'ok') {
-        setHourlyRate('');
-        fetchData();
-      } else {
-        alert(result.message);
+      if (response.ok) {
+        setNewCompanyName('');
+        setNewCompanyRate('');
+        setShowNewCompanyForm(false);
+        await fetchData();
       }
+    } catch (error) {
+      console.error('Error creating company:', error);
+    }
+  };
+
+  const updateRate = async () => {
+    if (!selectedCompany) return;
+    
+    try {
+      // Here we would update the company's hourly rate
+      // For now, we'll just refresh the data
+      await fetchData();
     } catch {
       alert('Error al actualizar tarifa');
     }
   };
 
   const handleBulkSave = async (entries: Array<{date: string, hours: number}>) => {
+    if (!selectedCompany) {
+      throw new Error('Selecciona una empresa primero');
+    }
+    
     try {
       // Usar el endpoint de bulk entries pero enviando directamente las entradas
       const promises = entries.map(entry => 
         fetch('/api/entries', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(entry)
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            ...entry,
+            company_id: selectedCompany.id
+          })
         })
       );
       
@@ -105,6 +162,21 @@ export default function Dashboard() {
       throw new Error('Error al guardar entradas masivas');
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Will redirect to login
+  }
 
   if (loading) {
     return (
@@ -133,7 +205,7 @@ export default function Dashboard() {
     );
   }
 
-  const totalEarnings = data?.settings.hourly_rate ? data.total_hours * data.settings.hourly_rate : 0;
+  const totalEarnings = selectedCompany?.hourly_rate && data?.total_hours ? data.total_hours * selectedCompany.hourly_rate : 0;
 
   // Función para renderizar icono de tendencia
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
@@ -152,7 +224,12 @@ export default function Dashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold mb-2">Panel de Control</h1>
-              <p className="text-gray-300">Análisis inteligente de tus horas de trabajo</p>
+              <p className="text-gray-300">
+                Bienvenido, {user?.first_name} {user?.last_name}
+                {selectedCompany && (
+                  <span className="ml-2 text-blue-200">• {selectedCompany.name}</span>
+                )}
+              </p>
             </div>
             <button
               onClick={() => setActiveTab('bulk-table')}
@@ -229,7 +306,7 @@ export default function Dashboard() {
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-600">Tarifa/Hora</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {formatPrice(data?.settings.hourly_rate || 0, true)}
+                        {formatPrice(selectedCompany?.hourly_rate || 0, true)}
                       </p>
                     </div>
                   </div>
@@ -362,44 +439,98 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Configuración Rápida */}
+              {/* Gestión de Empresas */}
               <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Settings className="h-5 w-5 mr-2 text-gray-600" />
-                  Configuración
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold flex items-center">
+                    <Building2 className="h-5 w-5 mr-2 text-gray-600" />
+                    Empresas
+                  </h3>
+                  <button
+                    onClick={() => setShowNewCompanyForm(!showNewCompanyForm)}
+                    className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Nueva
+                  </button>
+                </div>
+                
                 <div className="space-y-4">
+                  {/* Company Selector */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nueva Tarifa por Hora ($)
+                      Empresa Activa
                     </label>
-                    <div className="flex space-x-2">
+                    <select
+                      value={selectedCompany?.id || ''}
+                      onChange={(e) => {
+                        const company = data?.companies.find(c => c.id === parseInt(e.target.value));
+                        setSelectedCompany(company || null);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="">Seleccionar empresa...</option>
+                      {data?.companies?.map(company => (
+                        <option key={company.id} value={company.id}>
+                          {company.name} {company.hourly_rate ? `($${company.hourly_rate}/h)` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* New Company Form */}
+                  {showNewCompanyForm && (
+                    <div className="border-t pt-4 space-y-3">
+                      <input
+                        type="text"
+                        placeholder="Nombre de la empresa"
+                        value={newCompanyName}
+                        onChange={(e) => setNewCompanyName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        value={hourlyRate}
-                        onChange={(e) => setHourlyRate(e.target.value)}
-                        placeholder={data?.settings.hourly_rate?.toString() || ''}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        placeholder="Tarifa por hora (opcional)"
+                        value={newCompanyRate}
+                        onChange={(e) => setNewCompanyRate(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       />
-                      <button
-                        onClick={updateRate}
-                        className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-                      >
-                        Actualizar
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={createCompany}
+                          className="flex-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                        >
+                          Crear
+                        </button>
+                        <button
+                          onClick={() => setShowNewCompanyForm(false)}
+                          className="flex-1 px-3 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors text-sm"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   <div className="pt-2 border-t">
-                    <button
-                      onClick={() => setActiveTab('bulk-table')}
-                      className="w-full flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                    >
-                      <Zap className="h-4 w-4 mr-2" />
-                      Gestionar Registros
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setActiveTab('bulk-table')}
+                        className="flex-1 flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                      >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Gestionar Registros
+                      </button>
+                      <button
+                        onClick={logout}
+                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm flex items-center"
+                      >
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Salir
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
