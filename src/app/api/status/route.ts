@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 
     // Verify company ownership if company_id is provided
     if (companyIdNum) {
-      const company = await db.getCompanyById(companyIdNum, userId);
-      if (!company) {
+      const company = await db.getCompanyById(companyIdNum);
+      if (!company || company.user_id !== userId) {
         return NextResponse.json({
           status: 'error',
           message: 'Empresa no encontrada o sin permisos'
@@ -32,12 +32,20 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    const [entries, companies, weekdayAverages, totalHours] = await Promise.all([
-      db.getEntries(undefined, undefined, companyIdNum, userId),
-      db.getCompaniesByUserId(userId),
-      db.getWeekdayAverages(),
-      db.getTotalHours(undefined, undefined, companyIdNum, userId)
-    ]);
+    // Get companies first
+    const companies = await db.getUserCompanies(userId);
+    
+    // If no company specified but user has companies, use the first one
+    let selectedCompanyId = companyIdNum;
+    if (!selectedCompanyId && companies.length > 0) {
+      selectedCompanyId = companies[0].id!;
+    }
+    
+    const [entries, weekdayAverages, totalHours] = selectedCompanyId ? await Promise.all([
+      db.getEntries(selectedCompanyId),
+      db.getWeekdayAverages(selectedCompanyId),
+      db.getTotalHours(selectedCompanyId)
+    ]) : [[], [], 0];
 
     const response: ApiResponse = {
       status: 'ok',

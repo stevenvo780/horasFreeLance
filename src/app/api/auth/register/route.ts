@@ -6,10 +6,10 @@ import { RegisterRequest, AuthResponse } from '@/lib/types';
 export async function POST(request: NextRequest) {
   try {
     const body: RegisterRequest = await request.json();
-    const { email, password, first_name, last_name } = body;
+    const { email, password, name } = body;
 
     // Validation
-    if (!email || !password || !first_name || !last_name) {
+    if (!email || !password || !name) {
       return NextResponse.json({
         status: 'error',
         message: 'Todos los campos son requeridos'
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDatabase();
-    await db.initialize();
+    await db.init();
 
     // Check if user already exists
     const existingUser = await db.getUserByEmail(email);
@@ -35,16 +35,18 @@ export async function POST(request: NextRequest) {
       } as AuthResponse, { status: 409 });
     }
 
-    // Create user
-    const user = await db.createUser(email, password, first_name, last_name);
+    // Hash password and create user
+    const { hashPassword } = await import('@/lib/auth');
+    const passwordHash = await hashPassword(password);
+    const userId = await db.createUser(email, passwordHash, name);
 
     // Create default company
-    await db.createCompany('Mi empresa', 'Empresa por defecto', undefined, user.id!);
+    await db.createCompany('Mi empresa', 50.0, userId);
 
     // Generate JWT token
     const token = generateToken({
-      userId: user.id!,
-      email: user.email
+      userId: userId,
+      email: email
     });
 
     return NextResponse.json({
@@ -52,12 +54,9 @@ export async function POST(request: NextRequest) {
       message: 'Usuario registrado exitosamente',
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        created_at: user.created_at,
-        updated_at: user.updated_at
+        id: userId,
+        email: email,
+        name: name
       }
     } as AuthResponse);
 

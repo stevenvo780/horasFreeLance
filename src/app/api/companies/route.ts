@@ -14,9 +14,9 @@ export async function GET(request: NextRequest) {
     }
 
     const db = getDatabase();
-    await db.initialize();
+    await db.init();
 
-    const companies = await db.getCompaniesByUserId(userId);
+    const companies = await db.getUserCompanies(userId);
 
     return NextResponse.json({
       status: 'ok',
@@ -54,14 +54,14 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDatabase();
-    await db.initialize();
+    await db.init();
 
-    const company = await db.createCompany(name, description, hourly_rate, userId);
+    const companyId = await db.createCompany(name, hourly_rate || 0, userId);
 
     return NextResponse.json({
       status: 'ok',
       message: 'Empresa creada exitosamente',
-      data: company
+      data: { id: companyId, name, hourly_rate: hourly_rate || 0, user_id: userId }
     } as ApiResponse);
 
   } catch (error) {

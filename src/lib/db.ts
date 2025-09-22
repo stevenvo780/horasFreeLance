@@ -2,7 +2,7 @@ import { createClient } from '@libsql/client';
 import { HourEntry, Settings, WeekdayAverage, User, Company } from './types';
 
 const client = createClient({
-  url: process.env.TURSO_DATABASE_URL || 'file:data/hours.db'
+  url: 'file:data/hours.db'
 });
 
 class Database {

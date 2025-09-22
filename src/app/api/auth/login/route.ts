@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDatabase();
-    await db.initialize();
+    await db.init();
 
     // Find user by email
     const user = await db.getUserByEmail(email);
@@ -50,10 +50,8 @@ export async function POST(request: NextRequest) {
       user: {
         id: user.id,
         email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        created_at: user.created_at,
-        updated_at: user.updated_at
+        name: user.name,
+        created_at: user.created_at
       }
     } as AuthResponse);
 
