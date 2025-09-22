@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Clock, Check, X, Edit, Trash2, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Check, X, Edit, Trash2, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { WEEKDAY_NAMES_ES } from '@/lib/types';
 import { formatHours } from '@/lib/formatters';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,9 +36,6 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
   const [editingEntry, setEditingEntry] = useState<HourEntry | null>(null);
   const [newEntry, setNewEntry] = useState<{ date: string; hours: string }>({ date: '', hours: '' });
   const [loading, setLoading] = useState(false);
-  
-  // Modo de vista
-  const [viewMode, setViewMode] = useState<'list' | 'bulk'>('list');
 
   // Convertir entradas existentes a formato interno
   useEffect(() => {
@@ -186,25 +183,6 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
     }
   };
 
-  // Función para modo bulk (asignación masiva)
-  const generateBulkEntries = () => {
-    if (!startDate || !endDate) {
-      alert('Por favor selecciona un rango de fechas');
-      return;
-    }
-    
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    
-    if (start > end) {
-      alert('La fecha inicial debe ser anterior a la fecha final');
-      return;
-    }
-    
-    // Cambiar a modo bulk y generar entradas para el rango
-    setViewMode('bulk');
-  };
-
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -217,29 +195,6 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           <Calendar className="h-6 w-6 mr-2" />
           Gestión de Registros de Horas
         </h3>
-        
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'list' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-            }`}
-          >
-            Lista
-          </button>
-          <button
-            onClick={() => setViewMode('bulk')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'bulk' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-            }`}
-          >
-            Asignación Masiva
-          </button>
-        </div>
       </div>
 
       {/* Filtros */}
@@ -286,22 +241,10 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
             Limpiar Filtros
           </button>
         </div>
-        {viewMode === 'list' && (
-          <div className="flex items-end">
-            <button
-              onClick={generateBulkEntries}
-              className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors"
-            >
-              Asignación Masiva
-            </button>
-          </div>
-        )}
       </div>
 
-      {viewMode === 'list' && (
-        <>
-          {/* Estadísticas */}
-          <div className="bg-gray-50 p-4 rounded-md grid grid-cols-4 gap-4 mb-6">
+      {/* Estadísticas */}
+      <div className="bg-gray-50 p-4 rounded-md grid grid-cols-4 gap-4 mb-6">
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900">{stats.totalDays}</div>
               <div className="text-sm text-gray-900">Total registros</div>
@@ -485,281 +428,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
               No hay registros que coincidan con los filtros seleccionados
             </div>
           )}
-        </>
-      )}
 
-      {viewMode === 'bulk' && (
-        <BulkAssignmentMode 
-          startDate={startDate}
-          endDate={endDate}
-          existingEntries={existingEntries}
-          onSave={onSave}
-          onRefresh={onRefresh}
-          onBack={() => setViewMode('list')}
-        />
-      )}
-    </div>
-  );
-}
-
-// Componente separado para el modo de asignación masiva
-interface BulkAssignmentModeProps {
-  startDate: string;
-  endDate: string;
-  existingEntries: Array<{id?: number, date: string, hours: number}>;
-  onSave: (entries: Array<{date: string, hours: number}>) => Promise<void>;
-  onRefresh: () => void;
-  onBack: () => void;
-}
-
-function BulkAssignmentMode({ startDate, endDate, existingEntries, onSave, onRefresh, onBack }: BulkAssignmentModeProps) {
-  const [dateRows, setDateRows] = useState<Array<{date: string, weekday: number, weekdayName: string, hours: number | null, isExisting: boolean}>>([]);
-  const [defaultHours, setDefaultHours] = useState<number>(8);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (startDate && endDate) {
-      generateDateRows();
-    }
-  }, [startDate, endDate, existingEntries]);
-
-  const generateDateRows = () => {
-    if (!startDate || !endDate) return;
-    
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    
-    const rows: Array<{date: string, weekday: number, weekdayName: string, hours: number | null, isExisting: boolean}> = [];
-    const existingMap = new Map(existingEntries.map(e => [e.date, e.hours]));
-    
-    for (let current = new Date(start); current <= end; current.setDate(current.getDate() + 1)) {
-      const dateStr = current.toISOString().split('T')[0];
-      const weekday = current.getDay() === 0 ? 6 : current.getDay() - 1;
-      const existingHours = existingMap.get(dateStr);
-      
-      rows.push({
-        date: dateStr,
-        weekday,
-        weekdayName: WEEKDAY_NAMES_ES[weekday],
-        hours: existingHours ?? defaultHours,
-        isExisting: existingHours !== undefined
-      });
-    }
-    
-    setDateRows(rows);
-  };
-
-  const applyDefaultToAll = () => {
-    setDateRows(rows => 
-      rows.map(row => ({ ...row, hours: defaultHours }))
-    );
-  };
-
-  const applyToWeekdays = () => {
-    setDateRows(rows => 
-      rows.map(row => ({
-        ...row,
-        hours: row.weekday < 5 ? defaultHours : 0
-      }))
-    );
-  };
-
-  const clearAll = () => {
-    setDateRows(rows => 
-      rows.map(row => ({ ...row, hours: 0 }))
-    );
-  };
-
-  const updateRowHours = (index: number, hours: number) => {
-    setDateRows(rows => {
-      const newRows = [...rows];
-      newRows[index] = { ...newRows[index], hours };
-      return newRows;
-    });
-  };
-
-  const handleSave = async () => {
-    const entriesToSave = dateRows
-      .filter(row => row.hours !== null && row.hours > 0)
-      .map(row => ({ date: row.date, hours: row.hours! }));
-    
-    if (entriesToSave.length === 0) {
-      alert('No hay entradas válidas para guardar');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      await onSave(entriesToSave);
-      onRefresh();
-      alert(`Se guardaron ${entriesToSave.length} entradas`);
-      onBack();
-    } catch (error) {
-      alert('Error al guardar las entradas');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const totalHours = dateRows.reduce((sum, row) => sum + (row.hours || 0), 0);
-  const workingDays = dateRows.filter(row => row.hours && row.hours > 0).length;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h4 className="text-lg font-semibold">Asignación Masiva de Horas</h4>
-        <button
-          onClick={onBack}
-          className="px-4 py-2 bg-gray-100 text-gray-900 rounded-md hover:bg-gray-200 transition-colors"
-        >
-          ← Volver a Lista
-        </button>
-      </div>
-
-      {/* Controles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-1">Horas por defecto</label>
-          <input
-            type="number"
-            step="0.5"
-            min="0"
-            max="24"
-            value={defaultHours}
-            onChange={(e) => setDefaultHours(parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div className="flex items-end">
-          <button
-            onClick={generateDateRows}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Regenerar Tabla
-          </button>
-        </div>
-      </div>
-
-      {/* Botones de acción rápida */}
-      {dateRows.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={applyDefaultToAll}
-            className="px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200 text-sm"
-          >
-            Aplicar {defaultHours}h a todos
-          </button>
-          <button
-            onClick={applyToWeekdays}
-            className="px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 text-sm"
-          >
-            Solo días laborables
-          </button>
-          <button
-            onClick={clearAll}
-            className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
-          >
-            Limpiar todo
-          </button>
-        </div>
-      )}
-
-      {/* Estadísticas */}
-      {dateRows.length > 0 && (
-        <div className="bg-gray-50 p-4 rounded-md grid grid-cols-3 gap-4">
-          <div className="text-center">
-            <div className="text-lg font-bold text-gray-900">{workingDays}</div>
-            <div className="text-sm text-gray-900">Días con horas</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold text-gray-900">{formatHours(totalHours)}</div>
-            <div className="text-sm text-gray-900">Total horas</div>
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold text-gray-900">{dateRows.length}</div>
-            <div className="text-sm text-gray-900">Días en rango</div>
-          </div>
-        </div>
-      )}
-
-      {/* Tabla de asignación masiva */}
-      {dateRows.length > 0 && (
-        <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-md">
-          <table className="w-full">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr>
-                <th className="text-left py-2 px-3 font-medium text-gray-900">Fecha</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-900">Día</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-900">Horas</th>
-                <th className="text-center py-2 px-3 font-medium text-gray-900">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dateRows.map((row, index) => (
-                <tr key={row.date} className={`border-b ${row.weekday >= 5 ? 'bg-blue-50' : ''}`}>
-                  <td className="py-2 px-3 font-mono text-sm">{row.date}</td>
-                  <td className="py-2 px-3">
-                    <span className={`capitalize font-medium ${
-                      row.weekday >= 5 ? 'text-blue-600' : 'text-gray-900'
-                    }`}>
-                      {row.weekdayName}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="24"
-                      value={row.hours || ''}
-                      onChange={(e) => updateRowHours(index, parseFloat(e.target.value) || 0)}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    {row.isExisting ? (
-                      <span className="inline-flex items-center text-amber-600">
-                        <Clock className="h-4 w-4 mr-1" />
-                        <span className="text-xs">Existe</span>
-                      </span>
-                    ) : row.hours && row.hours > 0 ? (
-                      <span className="inline-flex items-center text-green-600">
-                        <Check className="h-4 w-4 mr-1" />
-                        <span className="text-xs">Nuevo</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center text-gray-400">
-                        <X className="h-4 w-4 mr-1" />
-                        <span className="text-xs">Vacío</span>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Botón guardar */}
-      {dateRows.length > 0 && (
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={loading || workingDays === 0}
-            className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center"
-          >
-            {loading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>}
-            Guardar {workingDays} entradas
-          </button>
-        </div>
-      )}
-
-      {!startDate || !endDate ? (
-        <div className="text-center py-8 text-gray-900">
-          Por favor selecciona un rango de fechas en los filtros superiores para generar la tabla de asignación masiva
-        </div>
-      ) : null}
     </div>
   );
 }
