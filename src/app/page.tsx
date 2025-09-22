@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, DollarSign, TrendingUp, Plus } from 'lucide-react';
 import { HourEntry, Settings, WeekdayAverage, WEEKDAY_NAMES_ES } from '@/lib/types';
+import { formatPrice, formatHours } from '@/lib/formatters';
+import BulkHoursTable from '@/components/BulkHoursTable';
 
 interface AppData {
   entries: HourEntry[];
@@ -12,10 +14,11 @@ interface AppData {
   entry_count: number;
 }
 
-export default function Home() {
+export default function Dashboard() {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table'>('dashboard');
 
   // Form states
   const [newEntry, setNewEntry] = useState({ date: '', hours: '' });
@@ -158,6 +161,24 @@ export default function Home() {
     }
   };
 
+  const handleBulkSave = async (entries: Array<{date: string, hours: number}>) => {
+    try {
+      // Usar el endpoint de bulk entries pero enviando directamente las entradas
+      const promises = entries.map(entry => 
+        fetch('/api/entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry)
+        })
+      );
+      
+      await Promise.all(promises);
+      fetchData();
+    } catch (error) {
+      throw new Error('Error al guardar entradas masivas');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -197,7 +218,37 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Navigation Tabs */}
+      <nav className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-4">
+          <div className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'dashboard'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('bulk-table')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'bulk-table'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Tabla Masiva
+            </button>
+          </div>
+        </div>
+      </nav>
+
       <div className="container mx-auto px-4 py-8">
+        {activeTab === 'dashboard' && (
+          <>
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
@@ -205,7 +256,7 @@ export default function Home() {
               <Clock className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Horas</p>
-                <p className="text-2xl font-bold text-gray-900">{data?.total_hours.toFixed(1) || '0.0'}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatHours(data?.total_hours || 0)}</p>
               </div>
             </div>
           </div>
@@ -226,7 +277,7 @@ export default function Home() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Tarifa/Hora</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  ${data?.settings.hourly_rate?.toFixed(2) || '0.00'}
+                  {formatPrice(data?.settings.hourly_rate || 0, true)}
                 </p>
               </div>
             </div>
@@ -237,7 +288,7 @@ export default function Home() {
               <TrendingUp className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Ingresos Estimados</p>
-                <p className="text-2xl font-bold text-gray-900">${totalEarnings.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-gray-900">{formatPrice(totalEarnings)}</p>
               </div>
             </div>
           </div>
@@ -469,6 +520,16 @@ export default function Home() {
             </div>
           </div>
         </div>
+          </>
+        )}
+
+        {activeTab === 'bulk-table' && (
+          <BulkHoursTable
+            onSave={handleBulkSave}
+            onRefresh={fetchData}
+            existingEntries={data?.entries || []}
+          />
+        )}
       </div>
     </div>
   );
