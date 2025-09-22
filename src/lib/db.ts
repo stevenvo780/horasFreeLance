@@ -1,8 +1,14 @@
 import { createClient } from '@libsql/client';
 import { HourEntry, Settings, WeekdayAverage, User, Company } from './types';
 
+// Use Turso in production, local SQLite in development
 const client = createClient({
-  url: 'file:data/hours.db'
+  url: process.env.NODE_ENV === 'production' 
+    ? process.env.TURSO_DATABASE_URL! 
+    : 'file:data/hours.db',
+  authToken: process.env.NODE_ENV === 'production' 
+    ? process.env.TURSO_AUTH_TOKEN 
+    : undefined,
 });
 
 class Database {
@@ -91,8 +97,7 @@ class Database {
       id: Number(row.id),
       email: String(row.email),
       password_hash: String(row.password_hash),
-      first_name: String(row.name),
-      last_name: '',
+      name: String(row.name),
       created_at: String(row.created_at)
     };
   }
@@ -110,8 +115,7 @@ class Database {
       id: Number(row.id),
       email: String(row.email),
       password_hash: String(row.password_hash),
-      first_name: String(row.name),
-      last_name: '',
+      name: String(row.name),
       created_at: String(row.created_at)
     };
   }
@@ -284,7 +288,7 @@ class Database {
     return { hourly_rate: 0 };
   }
 
-  async updateSettings(_settings: Settings): Promise<void> {
+  async updateSettings(): Promise<void> {
     // No-op since we now use company-based rates
   }
 }

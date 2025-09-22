@@ -1,23 +1,41 @@
 # 🚀 Guía de Despliegue en Vercel
 
-## Paso 1: Preparar la cuenta de Vercel
+## ⚠️ PROBLEMA ACTUAL - ERROR 405
 
-1. Ve a [vercel.com](https://vercel.com)
-2. Haz clic en "Sign up" 
-3. Conecta con tu cuenta de GitHub (stevenvo780)
+La aplicación actualmente falla en producción con error 405 en las APIs. Esto se debe a que **faltan las variables de entorno** necesarias para la base de datos.
 
-## Paso 2: Conectar el repositorio
+## Paso 1: Configurar Variables de Entorno en Vercel
 
-1. En el dashboard de Vercel, haz clic en **"New Project"**
-2. Busca el repositorio **"horasFreeLance"**
-3. Haz clic en **"Import"**
+**URGENTE**: Necesitas configurar estas variables en Vercel:
 
-## Paso 3: Configurar variables de entorno
+### Variables Requeridas:
 
-⚠️ **IMPORTANTE**: Antes de hacer deploy, debes configurar las variables de entorno:
+```bash
+JWT_SECRET=tu-clave-secreta-jwt-super-segura-2024
+TURSO_DATABASE_URL=libsql://tu-database.turso.io  
+TURSO_AUTH_TOKEN=tu-token-de-turso
+```
 
-1. En la pantalla de configuración del proyecto, ve a **"Environment Variables"**
-2. Agrega las siguientes variables:
+### Cómo configurarlas:
+
+1. Ve a [vercel.com/dashboard](https://vercel.com/dashboard)
+2. Selecciona tu proyecto "horas-freelance"  
+3. Ve a **Settings** → **Environment Variables**
+4. Agrega cada variable:
+   - **Name**: `JWT_SECRET`
+   - **Value**: una clave aleatoria segura
+   - **Environment**: Production, Preview, Development
+5. Repite para `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`
+
+## Paso 2: Configurar Base de Datos Turso
+
+Si no tienes Turso configurado:
+
+1. Ve a [turso.tech](https://turso.tech)
+2. Crea cuenta gratuita
+3. Crea una nueva database
+4. Copia la URL y Auth Token  
+5. Agrega estos valores a Vercel
 
 ### Variables requeridas:
 ```

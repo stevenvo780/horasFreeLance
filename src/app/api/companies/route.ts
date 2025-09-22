@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: CreateCompanyRequest = await request.json();
-    const { name, description, hourly_rate } = body;
+    const { name, hourly_rate } = body;
 
     if (!name) {
       return NextResponse.json({
