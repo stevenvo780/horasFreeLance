@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, Check, X, Edit, Trash2, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { WEEKDAY_NAMES_ES } from '@/lib/types';
 import { formatHours } from '@/lib/formatters';
+import { useAuth } from '@/hooks/useAuth';
 
 interface HourEntry {
   id?: number;
@@ -17,10 +18,13 @@ interface HourEntry {
 interface BulkHoursTableProps {
   onSave: (entries: Array<{date: string, hours: number}>) => Promise<void>;
   onRefresh: () => void;
-  existingEntries: Array<{date: string, hours: number}>;
+  existingEntries: Array<{id?: number, date: string, hours: number}>;
 }
 
 export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: BulkHoursTableProps) {
+  // Hook de autenticación
+  const { getAuthHeaders } = useAuth();
+  
   // Filtros y paginación
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -43,7 +47,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
       const weekday = date.getDay() === 0 ? 6 : date.getDay() - 1;
       
       return {
-        id: index,
+        id: entry.id ?? index, // Usar el ID real si existe, sino el índice
         date: entry.date,
         hours: entry.hours,
         weekday,
@@ -101,12 +105,28 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
     
     setLoading(true);
     try {
-      // Aquí iría la llamada a la API para actualizar
-      await onSave([{ date: editingEntry.date, hours: editingEntry.hours }]);
+      // Usar el endpoint PUT para actualizar la entrada existente
+      const response = await fetch('/api/entries', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id: editingEntry.id,
+          date: editingEntry.date,
+          hours: editingEntry.hours,
+          description: ''
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.status !== 'ok') {
+        throw new Error(data.message || 'Error al actualizar la entrada');
+      }
+
       setEditingEntry(null);
-      onRefresh();
+      onRefresh(); // Refrescar datos desde el servidor
     } catch (error) {
-      alert('Error al actualizar la entrada');
+      alert('Error al actualizar la entrada: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -119,12 +139,24 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
     
     setLoading(true);
     try {
-      // Aquí iría la llamada a la API para eliminar
-      // Por ahora simularemos eliminando con horas = 0
-      await onSave([{ date: entry.date, hours: 0 }]);
-      onRefresh();
+      // Usar el endpoint DELETE para eliminar la entrada
+      const response = await fetch('/api/entries', {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id: entry.id
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.status !== 'ok') {
+        throw new Error(data.message || 'Error al eliminar la entrada');
+      }
+
+      onRefresh(); // Refrescar datos desde el servidor
     } catch (error) {
-      alert('Error al eliminar la entrada');
+      alert('Error al eliminar la entrada: ' + (error instanceof Error ? error.message : 'Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -474,7 +506,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
 interface BulkAssignmentModeProps {
   startDate: string;
   endDate: string;
-  existingEntries: Array<{date: string, hours: number}>;
+  existingEntries: Array<{id?: number, date: string, hours: number}>;
   onSave: (entries: Array<{date: string, hours: number}>) => Promise<void>;
   onRefresh: () => void;
   onBack: () => void;
