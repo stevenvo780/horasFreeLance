@@ -781,7 +781,7 @@ function BulkAssignmentModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>

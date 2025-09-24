@@ -255,7 +255,11 @@ export default function Dashboard() {
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold mb-2">Panel de Control</h1>
+              <h1 style={{
+                fontSize: '1.5rem',
+                fontWeight: '600',
+                color: '#f3f4f6',
+              }}>Panel de Control</h1>
               <p className="text-gray-800">
                 Bienvenido, {user?.first_name} {user?.last_name}
                 {selectedCompany && (
