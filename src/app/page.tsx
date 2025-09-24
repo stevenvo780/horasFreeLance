@@ -138,7 +138,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleBulkSave = async (entries: Array<{date: string, hours: number}>) => {
+  const handleBulkSave = async (entries: Array<{date: string, hours: number, description?: string}>) => {
     if (!selectedCompany) {
       throw new Error('Selecciona una empresa primero');
     }
@@ -160,7 +160,8 @@ export default function Dashboard() {
             body: JSON.stringify({
               date: entry.date,
               hours: entry.hours,
-              company_id: selectedCompany.id
+              company_id: selectedCompany.id,
+              description: entry.description ?? ''
             })
           });
           

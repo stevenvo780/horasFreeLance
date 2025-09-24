@@ -13,13 +13,37 @@ interface HourEntry {
   weekday: number;
   weekdayName: string;
   isEditing?: boolean;
+  description?: string;
 }
 
 interface BulkHoursTableProps {
-  onSave: (entries: Array<{date: string, hours: number}>) => Promise<void>;
+  onSave: (entries: Array<{date: string, hours: number, description?: string}>) => Promise<void>;
   onRefresh: () => void;
-  existingEntries: Array<{id?: number, date: string, hours: number}>;
+  existingEntries: Array<{id?: number, date: string, hours: number, description?: string}>;
 }
+
+const normalizeStartOfDay = (value: Date) => {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const toISODate = (value: Date) => normalizeStartOfDay(value).toISOString().split('T')[0];
+
+const getMonday = (value: Date) => {
+  const date = normalizeStartOfDay(value);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // Ajustar para lunes como inicio
+  date.setDate(date.getDate() + diff);
+  return date;
+};
+
+const getSunday = (value: Date) => {
+  const monday = getMonday(value);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return normalizeStartOfDay(sunday);
+};
 
 export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: BulkHoursTableProps) {
   // Hook de autenticación
@@ -52,7 +76,8 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
         hours: entry.hours,
         weekday,
         weekdayName: WEEKDAY_NAMES_ES[weekday],
-        isEditing: false
+        isEditing: false,
+        description: entry.description ?? ''
       };
     });
     
@@ -192,6 +217,28 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
     setCurrentPage(1);
   }, [startDate, endDate, itemsPerPage]);
 
+  const handleOpenBulkMode = () => {
+    if (!startDate || !endDate) {
+      const today = new Date();
+      const defaultStart = toISODate(getMonday(today));
+      const defaultEnd = toISODate(getSunday(today));
+
+      if (!startDate) {
+        setStartDate(defaultStart);
+      }
+
+      if (!endDate) {
+        setEndDate(defaultEnd);
+      }
+
+      // Permitir que el estado se actualice antes de mostrar el modal
+      requestAnimationFrame(() => setShowBulkMode(true));
+      return;
+    }
+
+    setShowBulkMode(true);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-6">
@@ -247,7 +294,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
         </div>
         <div className="flex items-end">
           <button
-            onClick={() => setShowBulkMode(true)}
+            onClick={handleOpenBulkMode}
             className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors"
           >
             Asignación Masiva
@@ -458,53 +505,265 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
 }
 
 // Componente Modal para Asignación Masiva
-interface BulkEntry {
-  id: number | string;
-  date: string;
-  hours: number;
+interface BulkDayCell {
+  key: string;
+  date: string | null;
+  dayLabel: string;
+  weekdayIndex: number;
+  hours: string;
   description: string;
-  company_id: number;
-  hourly_rate: number;
+  showDescription: boolean;
+  isDisabled: boolean;
+  isExisting: boolean;
+  existingHours?: number;
+  existingDescription?: string;
 }
+
+type BulkWeekRow = BulkDayCell[];
 
 interface BulkAssignmentModalProps {
   startDate: string;
   endDate: string;
   existingEntries: HourEntry[];
-  onSave: (entries: Array<{date: string, hours: number}>) => Promise<void>;
+  onSave: (entries: Array<{date: string, hours: number, description?: string}>) => Promise<void>;
   onRefresh: () => void;
   onClose: () => void;
 }
 
-function BulkAssignmentModal({ 
-  startDate, 
-  endDate, 
-  existingEntries, 
-  onSave, 
-  onRefresh, 
-  onClose 
+const getWeekdayIndex = (value: Date) => {
+  const day = value.getDay();
+  return day === 0 ? 6 : day - 1;
+};
+
+function BulkAssignmentModal({
+  startDate,
+  endDate,
+  existingEntries,
+  onSave,
+  onRefresh,
+  onClose
 }: BulkAssignmentModalProps) {
-  const [bulkEntries, setBulkEntries] = useState<BulkEntry[]>([]);
+  const [weeks, setWeeks] = useState<BulkWeekRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  const range = useMemo(() => {
+    const parseDate = (value?: string) => {
+      if (!value) return null;
+      const parsed = new Date(`${value}T00:00:00`);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const today = new Date();
+    const startCandidate = parseDate(startDate) ?? getMonday(today);
+    const endCandidate = parseDate(endDate) ?? getSunday(today);
+
+    const start = getMonday(startCandidate);
+    let end = normalizeStartOfDay(endCandidate);
+    if (end < start) {
+      end = new Date(start);
+    }
+
+    return { start, end };
+  }, [startDate, endDate]);
+
+  const rangeStart = range.start;
+  const rangeEnd = range.end;
+
+  const existingEntriesMap = useMemo(() => {
+    const map = new Map<string, HourEntry>();
+    existingEntries.forEach((entry) => {
+      map.set(entry.date, entry);
+    });
+    return map;
+  }, [existingEntries]);
+
+  const historicalAverages = useMemo(() => {
+    const totals = Array.from({ length: 7 }, () => ({ sum: 0, count: 0 }));
+  const targetMonth = rangeStart.getMonth();
+  const targetYear = rangeStart.getFullYear();
+
+    existingEntries.forEach((entry) => {
+      const entryDate = new Date(`${entry.date}T00:00:00`);
+      if (Number.isNaN(entryDate.getTime())) return;
+
+      // Excluir mes en curso para usar "otros meses" como referencia
+      if (entryDate.getMonth() === targetMonth && entryDate.getFullYear() === targetYear) {
+        return;
+      }
+
+      const idx = getWeekdayIndex(entryDate);
+      totals[idx].sum += entry.hours;
+      totals[idx].count += 1;
+    });
+
+    const averagesByWeekday = totals.map(({ sum, count }) =>
+      count > 0 ? Number((sum / count).toFixed(2)) : null
+    );
+
+    const totalSum = totals.reduce((acc, item) => acc + item.sum, 0);
+    const totalCount = totals.reduce((acc, item) => acc + item.count, 0);
+    const overallAverage = totalCount > 0 ? Number((totalSum / totalCount).toFixed(2)) : null;
+
+    return { averagesByWeekday, overallAverage };
+  }, [existingEntries, rangeStart]);
+
+  useEffect(() => {
+  const monday = getMonday(rangeStart);
+  const sunday = getSunday(rangeEnd);
+    const formatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' });
+
+    const newWeeks: BulkWeekRow[] = [];
+    for (let cursor = new Date(monday); cursor <= sunday; cursor.setDate(cursor.getDate() + 7)) {
+      const weekStart = new Date(cursor);
+      const weekCells: BulkWeekRow = [];
+
+      for (let index = 0; index < 7; index++) {
+        const dayDate = new Date(weekStart);
+        dayDate.setDate(weekStart.getDate() + index);
+  const isoDate = toISODate(dayDate);
+  const withinRange = dayDate >= rangeStart && dayDate <= rangeEnd;
+  const existingEntry = existingEntriesMap.get(isoDate);
+
+        weekCells.push({
+          key: `${isoDate}-${index}`,
+          date: withinRange ? isoDate : null,
+          dayLabel: withinRange ? formatter.format(dayDate) : '',
+          weekdayIndex: index,
+          hours: '',
+          description: '',
+          showDescription: false,
+          isDisabled: !withinRange || Boolean(existingEntry),
+          isExisting: Boolean(existingEntry),
+          existingHours: existingEntry?.hours,
+          existingDescription: existingEntry?.description || ''
+        });
+      }
+
+      newWeeks.push(weekCells);
+    }
+
+    setWeeks(newWeeks);
+  }, [existingEntriesMap, rangeEnd, rangeStart]);
+
+  const updateHours = (weekIndex: number, dayIndex: number, value: string) => {
+    setWeeks((prev) =>
+      prev.map((week, wi) =>
+        week.map((day, di) => {
+          if (wi === weekIndex && di === dayIndex) {
+            return { ...day, hours: value };
+          }
+          return day;
+        })
+      )
+    );
+  };
+
+  const updateDescription = (weekIndex: number, dayIndex: number, value: string) => {
+    setWeeks((prev) =>
+      prev.map((week, wi) =>
+        week.map((day, di) => {
+          if (wi === weekIndex && di === dayIndex) {
+            return { ...day, description: value };
+          }
+          return day;
+        })
+      )
+    );
+  };
+
+  const toggleDescription = (weekIndex: number, dayIndex: number) => {
+    setWeeks((prev) =>
+      prev.map((week, wi) =>
+        week.map((day, di) => {
+          if (wi === weekIndex && di === dayIndex) {
+            return { ...day, showDescription: !day.showDescription };
+          }
+          return day;
+        })
+      )
+    );
+  };
+
+  const clearAllHours = () => {
+    setWeeks((prev) =>
+      prev.map((week) =>
+        week.map((day) => ({
+          ...day,
+          hours: ''
+        }))
+      )
+    );
+  };
+
+  const fillWithHistoricalAverage = () => {
+    const { averagesByWeekday, overallAverage } = historicalAverages;
+    if (!averagesByWeekday.some((value) => value !== null) && overallAverage === null) {
+      alert('No hay datos históricos suficientes para calcular un promedio.');
+      return;
+    }
+
+    setWeeks((prev) =>
+      prev.map((week) =>
+        week.map((day) => {
+          if (day.isDisabled || !day.date) {
+            return day;
+          }
+
+          const average = averagesByWeekday[day.weekdayIndex] ?? overallAverage;
+          if (!average || average <= 0) {
+            return { ...day, hours: '' };
+          }
+
+          const rounded = Math.round(average * 2) / 2;
+          return { ...day, hours: rounded.toString() };
+        })
+      )
+    );
+  };
 
   const handleBulkSave = async () => {
     setIsLoading(true);
     try {
-      const validEntries = bulkEntries.filter(entry => 
-        entry.hours > 0 || entry.description.trim() !== ''
-      );
-      
-      if (validEntries.length > 0) {
-        // Convertir al formato esperado por onSave
-        const saveEntries = validEntries.map(entry => ({
-          date: entry.date,
-          hours: entry.hours
-        }));
-        
-        await onSave(saveEntries);
-        onRefresh();
-        onClose();
+      const invalidDates: string[] = [];
+      const entriesToSave: Array<{ date: string; hours: number; description?: string }> = [];
+
+      weeks.forEach((week) => {
+        week.forEach((day) => {
+          if (!day.date || day.isDisabled) return;
+          if (day.hours === '') return;
+
+          const parsed = parseFloat(day.hours);
+          if (Number.isNaN(parsed) || parsed <= 0) {
+            return;
+          }
+
+          if (parsed > 24) {
+            invalidDates.push(day.dayLabel || day.date);
+            return;
+          }
+
+          const rounded = Math.round(parsed * 4) / 4;
+          entriesToSave.push({
+            date: day.date,
+            hours: rounded,
+            description: day.description.trim() || undefined
+          });
+        });
+      });
+
+      if (invalidDates.length > 0) {
+        alert(`Revisa las horas asignadas en: ${invalidDates.join(', ')}. El máximo permitido es 24 horas.`);
+        return;
       }
+
+      if (entriesToSave.length === 0) {
+        alert('No hay horas válidas para guardar. Agrega valores mayores a 0.');
+        return;
+      }
+
+      await onSave(entriesToSave);
+      onRefresh();
+      onClose();
     } catch (error) {
       console.error('Error saving bulk entries:', error);
     } finally {
@@ -512,179 +771,146 @@ function BulkAssignmentModal({
     }
   };
 
-  const updateBulkEntry = (index: number, field: keyof BulkEntry, value: string | number) => {
-    setBulkEntries(prev => prev.map((entry, i) => 
-      i === index ? { ...entry, [field]: value } : entry
-    ));
-  };
-
-  const fillAverageHours = () => {
-    // Calcular promedio de las entradas existentes
-    const existingHours = existingEntries
-      .filter(entry => entry.hours > 0)
-      .map(entry => entry.hours);
-    
-    if (existingHours.length > 0) {
-      const average = existingHours.reduce((a, b) => a + b, 0) / existingHours.length;
-      const roundedAverage = Math.round(average * 2) / 2; // Redondear a 0.5
-      
-      setBulkEntries(prev => prev.map(entry => ({
-        ...entry,
-        hours: roundedAverage
-      })));
-    }
-  };
-
-  const regenerateBulkEntries = () => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const entries: BulkEntry[] = [];
-    
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      
-      // Verificar si ya existe una entrada para esta fecha
-      const existingEntry = existingEntries.find(entry => entry.date === dateStr);
-      
-      if (!existingEntry) {
-        entries.push({
-          id: '',
-          date: dateStr,
-          hours: 0,
-          description: '',
-          company_id: 1,
-          hourly_rate: 25
-        });
-      }
-    }
-    
-    setBulkEntries(entries);
-  };
-
-  // Generar entradas al abrir el modal
-  React.useEffect(() => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const entries: BulkEntry[] = [];
-    
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      
-      // Verificar si ya existe una entrada para esta fecha
-      const existingEntry = existingEntries.find(entry => entry.date === dateStr);
-      
-      if (!existingEntry) {
-        entries.push({
-          id: '',
-          date: dateStr,
-          hours: 0,
-          description: '',
-          company_id: 1,
-          hourly_rate: 25
-        });
-      }
-    }
-    
-    setBulkEntries(entries);
-  }, [startDate, endDate, existingEntries]);
+  const rangeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-ES', {
+        day: '2-digit',
+        month: 'long'
+      }),
+    []
+  );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Asignación Masiva de Horas</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Asignación Masiva de Horas</h2>
+            <p className="text-sm text-gray-600">
+              Rango seleccionado: {rangeFormatter.format(rangeStart)} – {rangeFormatter.format(rangeEnd)}
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
+            aria-label="Cerrar"
           >
             ✕
           </button>
         </div>
 
-        <div className="mb-4 flex gap-2">
+        <div className="px-6 py-4 flex flex-wrap gap-3 border-b border-gray-200">
           <button
-            onClick={fillAverageHours}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            type="button"
+            onClick={fillWithHistoricalAverage}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
-            Rellenar con Promedio
+            Autocompletar con promedio histórico
           </button>
           <button
-            onClick={regenerateBulkEntries}
-            className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            type="button"
+            onClick={clearAllHours}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
           >
-            Regenerar Fechas
+            Limpiar horas
           </button>
         </div>
 
-        {bulkEntries.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">
-            No hay fechas disponibles para asignación masiva.
-            Todas las fechas ya tienen entradas.
-          </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              {bulkEntries.map((entry, index) => (
-                <div key={index} className="border rounded p-3">
-                  <div className="font-semibold mb-2">
-                    {new Date(entry.date).toLocaleDateString('es-ES', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short'
-                    })}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="24"
-                      value={entry.hours}
-                      onChange={(e) => updateBulkEntry(index, 'hours', parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 border rounded"
-                      placeholder="Horas"
-                    />
-                    
-                    <textarea
-                      value={entry.description}
-                      onChange={(e) => updateBulkEntry(index, 'description', e.target.value)}
-                      className="w-full p-2 border rounded resize-none"
-                      rows={2}
-                      placeholder="Descripción..."
-                    />
-                    
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={entry.hourly_rate}
-                      onChange={(e) => updateBulkEntry(index, 'hourly_rate', parseFloat(e.target.value) || 0)}
-                      className="w-full p-2 border rounded"
-                      placeholder="Tarifa por hora"
-                    />
-                  </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+          {weeks.map((week, weekIndex) => (
+            <div key={`week-${weekIndex}`} className="grid grid-cols-1 gap-3 md:grid-cols-7">
+              {week.map((day, dayIndex) => (
+                <div
+                  key={day.key}
+                  className={`min-h-[160px] rounded-lg border p-3 transition-colors ${
+                    day.isDisabled
+                      ? 'border-dashed border-gray-200 bg-gray-50'
+                      : 'border-gray-200 bg-white hover:border-blue-300'
+                  }`}
+                >
+                  {day.date ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            {WEEKDAY_NAMES_ES[day.weekdayIndex]}
+                          </p>
+                          <p className="text-sm font-semibold text-gray-900">{day.dayLabel}</p>
+                        </div>
+                        {day.isExisting && (
+                          <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+                            Ya registrado
+                          </span>
+                        )}
+                      </div>
+
+                      {!day.isDisabled ? (
+                        <>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="24"
+                            step="0.25"
+                            value={day.hours}
+                            onChange={(e) => updateHours(weekIndex, dayIndex, e.target.value)}
+                            className="mt-3 w-full rounded-md border border-gray-300 px-2 py-1.5 text-center text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Horas"
+                          />
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => toggleDescription(weekIndex, dayIndex)}
+                            className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700"
+                          >
+                            {day.showDescription ? 'Ocultar descripción' : 'Añadir descripción'}
+                          </button>
+                          {day.showDescription && (
+                            <textarea
+                              value={day.description}
+                              onChange={(e) => updateDescription(weekIndex, dayIndex, e.target.value)}
+                              className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              rows={2}
+                              placeholder="Descripción opcional"
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <p className="mt-3 text-xs text-gray-500">
+                          {day.isExisting
+                            ? `Registrado: ${formatHours(day.existingHours || 0)}`
+                            : 'Fecha fuera del rango seleccionado'}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-gray-400">
+                      Sin fecha
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
+          ))}
+        </div>
 
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 border rounded hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleBulkSave}
-                disabled={isLoading}
-                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
-              >
-                {isLoading ? 'Guardando...' : 'Guardar Todo'}
-              </button>
-            </div>
-          </>
-        )}
+        <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleBulkSave}
+            disabled={isLoading}
+            className="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-60"
+          >
+            {isLoading ? 'Guardando...' : 'Guardar horas'}
+          </button>
+        </div>
       </div>
     </div>
   );

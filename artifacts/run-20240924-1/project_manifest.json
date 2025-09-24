@@ -1,0 +1,16 @@
+{
+  "root": "/mnt/DATA/repos/Personal/horasFreeLance",
+  "branch": "main",
+  "commit": "127c935",
+  "languages": ["TypeScript", "JavaScript", "CSS"],
+  "packageManagers": ["npm"],
+  "frameworks": ["Next.js", "React"],
+  "keyPaths": {
+    "app": "src/app",
+    "components": "src/components",
+    "hooks": "src/hooks",
+    "lib": "src/lib",
+    "publicAssets": "public",
+    "database": "data/hours.db"
+  }
+}

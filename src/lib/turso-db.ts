@@ -195,6 +195,7 @@ class TursoDatabase {
     }
 
     const changes: EntryChange[] = [];
+    // eslint-disable-next-line prefer-const
     let currentDate = new Date(startDate);
     const endDateObj = new Date(endDate);
 

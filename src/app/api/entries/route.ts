@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     await initializeDatabase();
     const db = getDatabase();
     
-    const body = await request.json();
-    const { date, hours, mode = 'set', company_id } = body;
+  const body = await request.json();
+  const { date, hours, mode = 'set', company_id, description = '' } = body;
 
     if (!date || typeof hours !== 'number' || !company_id) {
       return NextResponse.json({
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 404 });
     }
 
-    const entryId = await db.addEntry(date, hours, '', company_id);
+  await db.addEntry(date, hours, description, company_id);
 
     const response: ApiResponse = {
       status: 'ok',
