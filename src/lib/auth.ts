@@ -10,27 +10,47 @@ type GlobalWithJwtDevSecret = typeof globalThis & {
 const globalWithJwtSecret = globalThis as GlobalWithJwtDevSecret;
 const nodeEnv = process.env.NODE_ENV ?? 'development';
 const isDevOrTest = nodeEnv === 'development' || nodeEnv === 'test';
+const nextPhase = process.env.NEXT_PHASE;
+const isBuildPhase = nextPhase === 'phase-production-build' || nextPhase === 'phase-production-export';
 
-let rawSecret = process.env.JWT_SECRET;
-
-if (!rawSecret) {
-  if (!isDevOrTest) {
-    throw new Error('JWT_SECRET environment variable is required for authentication.');
-  }
-
+function ensureDevSecret(): string {
   if (!globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__) {
-    globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__ = crypto
-      .randomBytes(32)
-      .toString('hex');
+    globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__ = crypto.randomBytes(32).toString('hex');
     console.warn(
       '[auth] JWT_SECRET no está definido. Se generó un secreto temporal para desarrollo; los tokens se invalidarán al reiniciar.'
     );
   }
-
-  rawSecret = globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__;
+  return globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__;
 }
 
-const JWT_SECRET: string = rawSecret;
+function ensureBuildSecret(): string {
+  if (!globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__) {
+    globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__ = crypto.randomBytes(32).toString('hex');
+    console.warn(
+      '[auth] JWT_SECRET no está definido durante la fase de build. Se usará un secreto temporal únicamente para la compilación; define JWT_SECRET en producción.'
+    );
+  }
+  return globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__;
+}
+
+function resolveJwtSecret(): string {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret) {
+    return envSecret;
+  }
+
+  if (isDevOrTest) {
+    return ensureDevSecret();
+  }
+
+  if (isBuildPhase) {
+    return ensureBuildSecret();
+  }
+
+  throw new Error('JWT_SECRET environment variable is required for authentication.');
+}
+
+const JWT_SECRET: string = resolveJwtSecret();
 
 const JWT_EXPIRES_IN = '7d';
 const allowInsecureCookie = process.env.ALLOW_INSECURE_AUTH_COOKIE === 'true';

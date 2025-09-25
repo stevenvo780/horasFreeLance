@@ -1,23 +1,89 @@
-import { createClient } from '@libsql/client';
+import { createClient, type ResultSet } from '@libsql/client';
 import { HourEntry, Settings, WeekdayAverage, User, Company, Project, EntryChange } from './types';
 
-// Use Turso in production, local SQLite in development
-const client = createClient({
-  url: process.env.NODE_ENV === 'production' 
-    ? process.env.TURSO_DATABASE_URL! 
-    : 'file:data/hours.db',
-  authToken: process.env.NODE_ENV === 'production' 
-    ? process.env.TURSO_AUTH_TOKEN 
-    : undefined,
-});
+type LibsqlClient = ReturnType<typeof createClient>;
 
+const nextPhase = process.env.NEXT_PHASE;
+const isBuildPhase = nextPhase === 'phase-production-build' || nextPhase === 'phase-production-export';
+
+function createDatabaseClient(): LibsqlClient {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (!isProduction) {
+    return createClient({ url: 'file:data/hours.db' });
+  }
+
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (url && authToken) {
+    return createClient({ url, authToken });
+  }
+
+  if (isBuildPhase) {
+    console.warn('[turso] Variables TURSO_DATABASE_URL/TURSO_AUTH_TOKEN no definidas durante la fase de build. Se usará un cliente stub solo para la compilación.');
+
+    const stubResponse: ResultSet = {
+      columns: [],
+      columnTypes: [],
+      rows: [] as ResultSet['rows'],
+      rowsAffected: 0,
+      lastInsertRowid: undefined,
+      toJSON() {
+        return {
+          columns: this.columns,
+          columnTypes: this.columnTypes,
+          rows: this.rows,
+          rowsAffected: this.rowsAffected,
+          lastInsertRowid: this.lastInsertRowid,
+        };
+      }
+    };
+
+    const stub: Partial<LibsqlClient> = {
+      execute: async (...args: unknown[]) => {
+        void args;
+        return stubResponse;
+      },
+      executeMultiple: async (...args: unknown[]) => {
+        void args;
+        return undefined;
+      },
+      batch: async (...args: unknown[]) => {
+        void args;
+        return [] as ResultSet[];
+      },
+      migrate: async (...args: unknown[]) => {
+        void args;
+        return [] as ResultSet[];
+      },
+      close: () => undefined,
+      reconnect: () => undefined,
+      sync: async () => undefined,
+      protocol: 'stub',
+      closed: false,
+    };
+
+    return stub as LibsqlClient;
+  }
+
+  throw new Error('TURSO_DATABASE_URL y TURSO_AUTH_TOKEN son necesarios para conectarse a Turso en producción.');
+}
 class Database {
-  private client = client;
+  private client: LibsqlClient | null = null;
+
+  private getClient(): LibsqlClient {
+    if (!this.client) {
+      this.client = createDatabaseClient();
+    }
+    return this.client;
+  }
 
   async init(): Promise<void> {
     try {
+      const client = this.getClient();
       // Create users table
-      await this.client.execute(`
+      await client.execute(`
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           email TEXT UNIQUE NOT NULL,
@@ -28,7 +94,7 @@ class Database {
       `);
 
       // Create companies table
-      await this.client.execute(`
+      await client.execute(`
         CREATE TABLE IF NOT EXISTS companies (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -41,7 +107,7 @@ class Database {
       `);
 
       // Create projects table
-      await this.client.execute(`
+      await client.execute(`
         CREATE TABLE IF NOT EXISTS projects (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -55,7 +121,7 @@ class Database {
       `);
 
       // Create hour_entries table
-      await this.client.execute(`
+      await client.execute(`
         CREATE TABLE IF NOT EXISTS hour_entries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           date TEXT NOT NULL,
@@ -72,7 +138,7 @@ class Database {
       await this.ensureProjectColumns();
 
       // Create weekday_averages table
-      await this.client.execute(`
+      await client.execute(`
         CREATE TABLE IF NOT EXISTS weekday_averages (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           weekday INTEGER NOT NULL,
@@ -91,19 +157,23 @@ class Database {
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    if (this.client) {
+      await this.client.close();
+      this.client = null;
+    }
   }
 
   private async ensureProjectColumns(): Promise<void> {
     try {
-      const result = await this.client.execute({ sql: "PRAGMA table_info('hour_entries')" });
-      const hasProjectColumn = result.rows.some((row) => {
-        const name = (row as Record<string, unknown>).name;
+      const client = this.getClient();
+      const result = await client.execute({ sql: "PRAGMA table_info('hour_entries')" });
+      const hasProjectColumn = result.rows.some((row: Record<string, unknown>) => {
+        const name = row.name;
         return typeof name === 'string' && name === 'project_id';
       });
 
       if (!hasProjectColumn) {
-        await this.client.execute({
+        await client.execute({
           sql: 'ALTER TABLE hour_entries ADD COLUMN project_id INTEGER'
         });
       }
@@ -115,7 +185,8 @@ class Database {
 
   // User methods
   async createUser(email: string, passwordHash: string, name: string): Promise<number> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)',
       args: [email, passwordHash, name]
     });
@@ -123,14 +194,15 @@ class Database {
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM users WHERE email = ?',
       args: [email]
     });
     
     if (result.rows.length === 0) return null;
     
-    const row = result.rows[0];
+    const row = result.rows[0] as Record<string, unknown>;
     return {
       id: Number(row.id),
       email: String(row.email),
@@ -141,14 +213,15 @@ class Database {
   }
 
   async getUserById(id: number): Promise<User | null> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM users WHERE id = ?',
       args: [id]
     });
     
     if (result.rows.length === 0) return null;
-    
-    const row = result.rows[0];
+
+    const row = result.rows[0] as Record<string, unknown>;
     return {
       id: Number(row.id),
       email: String(row.email),
@@ -160,7 +233,8 @@ class Database {
 
   // Company methods
   async createCompany(name: string, hourlyRate: number, userId: number): Promise<number> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'INSERT INTO companies (name, hourly_rate, user_id) VALUES (?, ?, ?)',
       args: [name, hourlyRate, userId]
     });
@@ -168,12 +242,13 @@ class Database {
   }
 
   async getUserCompanies(userId: number): Promise<Company[]> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM companies WHERE user_id = ? ORDER BY created_at DESC',
       args: [userId]
     });
     
-    return result.rows.map(row => ({
+    return result.rows.map((row: Record<string, unknown>) => ({
       id: Number(row.id),
       name: String(row.name),
       hourly_rate: Number(row.hourly_rate),
@@ -184,14 +259,15 @@ class Database {
   }
 
   async getCompanyById(id: number): Promise<Company | null> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM companies WHERE id = ?',
       args: [id]
     });
     
     if (result.rows.length === 0) return null;
     
-    const row = result.rows[0];
+    const row = result.rows[0] as Record<string, unknown>;
     return {
       id: Number(row.id),
       name: String(row.name),
@@ -203,14 +279,16 @@ class Database {
   }
 
   async updateCompany(id: number, name: string, hourlyRate: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'UPDATE companies SET name = ?, hourly_rate = ? WHERE id = ?',
       args: [name, hourlyRate, id]
     });
   }
 
   async deleteCompany(id: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'DELETE FROM companies WHERE id = ?',
       args: [id]
     });
@@ -218,7 +296,8 @@ class Database {
 
   // Project methods
   async createProject(name: string, companyId: number, userId: number): Promise<number> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'INSERT INTO projects (name, company_id, user_id) VALUES (?, ?, ?)',
       args: [name, companyId, userId]
     });
@@ -226,14 +305,15 @@ class Database {
   }
 
   async getProjectById(id: number): Promise<Project | null> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM projects WHERE id = ?',
       args: [id]
     });
 
     if (result.rows.length === 0) return null;
 
-    const row = result.rows[0];
+    const row = result.rows[0] as Record<string, unknown>;
     return {
       id: Number(row.id),
       name: String(row.name),
@@ -244,12 +324,13 @@ class Database {
   }
 
   async getCompanyProjects(companyId: number): Promise<Project[]> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM projects WHERE company_id = ? ORDER BY created_at DESC',
       args: [companyId]
     });
 
-    return result.rows.map((row) => ({
+    return result.rows.map((row: Record<string, unknown>) => ({
       id: Number(row.id),
       name: String(row.name),
       company_id: Number(row.company_id),
@@ -259,12 +340,13 @@ class Database {
   }
 
   async getUserProjects(userId: number): Promise<Project[]> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC',
       args: [userId]
     });
 
-    return result.rows.map((row) => ({
+    return result.rows.map((row: Record<string, unknown>) => ({
       id: Number(row.id),
       name: String(row.name),
       company_id: Number(row.company_id),
@@ -274,14 +356,16 @@ class Database {
   }
 
   async updateProject(id: number, name: string): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'UPDATE projects SET name = ? WHERE id = ?',
       args: [name, id]
     });
   }
 
   async deleteProject(id: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'DELETE FROM projects WHERE id = ?',
       args: [id]
     });
@@ -289,7 +373,8 @@ class Database {
 
   // Hour entries methods
   async addEntry(date: string, hours: number, description: string, companyId: number, projectId?: number | null): Promise<number> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'INSERT INTO hour_entries (date, hours, description, company_id, project_id) VALUES (?, ?, ?, ?, ?)',
       args: [date, hours, description, companyId, projectId ?? null]
     });
@@ -307,12 +392,13 @@ class Database {
       sql += ' AND project_id IS NULL';
     }
 
-    const result = await this.client.execute({ sql, args });
+    const client = this.getClient();
+    const result = await client.execute({ sql, args });
     if (result.rows.length === 0) {
       return null;
     }
 
-    const row = result.rows[0];
+    const row = result.rows[0] as Record<string, unknown>;
     return {
       id: Number(row.id),
       date: String(row.date),
@@ -325,7 +411,8 @@ class Database {
   }
 
   async getEntryById(id: number): Promise<HourEntry | null> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM hour_entries WHERE id = ?',
       args: [id]
     });
@@ -334,7 +421,7 @@ class Database {
       return null;
     }
 
-    const row = result.rows[0];
+    const row = result.rows[0] as Record<string, unknown>;
     return {
       id: Number(row.id),
       date: String(row.date),
@@ -347,12 +434,13 @@ class Database {
   }
 
   async getEntries(companyId: number): Promise<HourEntry[]> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM hour_entries WHERE company_id = ? ORDER BY date DESC, id DESC',
       args: [companyId]
     });
     
-    return result.rows.map(row => ({
+    return result.rows.map((row: Record<string, unknown>) => ({
       id: Number(row.id),
       date: String(row.date),
       hours: Number(row.hours),
@@ -363,29 +451,32 @@ class Database {
   }
 
   async updateEntry(id: number, date: string, hours: number, description: string, projectId?: number | null): Promise<void> {
+    const client = this.getClient();
     if (typeof projectId === 'undefined') {
-      await this.client.execute({
+      await client.execute({
         sql: 'UPDATE hour_entries SET date = ?, hours = ?, description = ? WHERE id = ?',
         args: [date, hours, description, id]
       });
       return;
     }
 
-    await this.client.execute({
+    await client.execute({
       sql: 'UPDATE hour_entries SET date = ?, hours = ?, description = ?, project_id = ? WHERE id = ?',
       args: [date, hours, description, projectId ?? null, id]
     });
   }
 
   async deleteEntry(id: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'DELETE FROM hour_entries WHERE id = ?',
       args: [id]
     });
   }
 
   async getTotalHours(companyId: number): Promise<number> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT COALESCE(SUM(hours), 0) as total FROM hour_entries WHERE company_id = ?',
       args: [companyId]
     });
@@ -400,12 +491,13 @@ class Database {
 
   // Weekday averages methods
   async getWeekdayAverages(companyId: number): Promise<WeekdayAverage[]> {
-    const result = await this.client.execute({
+    const client = this.getClient();
+    const result = await client.execute({
       sql: 'SELECT * FROM weekday_averages WHERE company_id = ? ORDER BY weekday',
       args: [companyId]
     });
     
-    return result.rows.map(row => ({
+    return result.rows.map((row: Record<string, unknown>) => ({
       id: Number(row.id),
       weekday: Number(row.weekday),
       average_hours: Number(row.average_hours),
@@ -414,7 +506,8 @@ class Database {
   }
 
   async updateWeekdayAverage(weekday: number, averageHours: number, companyId: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: `INSERT INTO weekday_averages (weekday, average_hours, company_id) 
             VALUES (?, ?, ?) 
             ON CONFLICT(weekday, company_id) 
@@ -432,6 +525,7 @@ class Database {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const changes: EntryChange[] = [];
+    const client = this.getClient();
     
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
       const weekday = date.getDay();
@@ -441,7 +535,7 @@ class Database {
         const dateString = date.toISOString().split('T')[0];
         
         // Check if entry already exists
-        const existingResult = await this.client.execute({
+        const existingResult = await client.execute({
           sql: 'SELECT id FROM hour_entries WHERE date = ? AND company_id = ?',
           args: [dateString, companyId]
         });
@@ -455,7 +549,7 @@ class Database {
           });
         }
         else if (overwrite) {
-          const existing = existingResult.rows[0];
+          const existing = existingResult.rows[0] as Record<string, unknown>;
           await this.updateEntry(Number(existing.id), dateString, averageHours, 'Filled with average');
           changes.push({
             date: dateString,
@@ -479,7 +573,8 @@ class Database {
   }
 
   async updateCompanyRate(companyId: number, hourlyRate: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'UPDATE companies SET hourly_rate = ? WHERE id = ?',
       args: [hourlyRate, companyId]
     });

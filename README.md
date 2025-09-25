@@ -39,6 +39,7 @@ npm run dev
 - Copia `.env.example` a `.env.local` y ajusta los valores para tu entorno.
 - Define siempre `JWT_SECRET` en producción. Si falta en desarrollo se generará uno temporal y los usuarios serán desconectados al reiniciar el servidor.
 - Revisa `ALLOW_INSECURE_AUTH_COOKIE` y `RATE_LIMIT_TRUST_FORWARD_HEADER` solo si necesitas modificar el comportamiento por defecto.
+- Cuando despliegues con Turso/libSQL, añade `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`. Durante `next build` se usa un cliente stub si faltan, pero en producción real las rutas de la API fallarán sin estas credenciales.
 
 ## Uso
 

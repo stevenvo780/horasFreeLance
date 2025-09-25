@@ -1,14 +1,46 @@
 import { createClient } from '@libsql/client';
 import { HourEntry, Settings, EntryChange, WeekdayAverage } from './types';
 
-// Create Turso client
-const client = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
-});
+type TursoClient = ReturnType<typeof createClient>;
+
+const nextPhase = process.env.NEXT_PHASE;
+const isBuildPhase = nextPhase === 'phase-production-build' || nextPhase === 'phase-production-export';
+
+function createTursoClient(): TursoClient {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (url && authToken) {
+    return createClient({ url, authToken });
+  }
+
+  if (isBuildPhase) {
+    console.warn('[turso] Variables TURSO_DATABASE_URL/TURSO_AUTH_TOKEN no definidas durante la fase de build. Se usará un cliente stub solo para la compilación.');
+    const stubError = () => {
+      throw new Error('[turso] Se intentó acceder a la base de datos sin credenciales. Define TURSO_DATABASE_URL y TURSO_AUTH_TOKEN en producción.');
+    };
+
+    const stub: Partial<TursoClient> = {
+      execute: async () => stubError(),
+      executeMultiple: async () => stubError(),
+      close: async () => undefined,
+    };
+
+    return stub as TursoClient;
+  }
+
+  throw new Error('TURSO_DATABASE_URL y TURSO_AUTH_TOKEN son necesarios para conectarse a Turso.');
+}
 
 class TursoDatabase {
-  private client = client;
+  private client: TursoClient | null = null;
+
+  private getClient(): TursoClient {
+    if (!this.client) {
+      this.client = createTursoClient();
+    }
+    return this.client;
+  }
 
   async connect(): Promise<void> {
     // Turso connections are automatic, no explicit connection needed
@@ -40,16 +72,17 @@ class TursoDatabase {
       CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
     `;
 
-    await this.client.executeMultiple(createTablesSQL);
+    const client = this.getClient();
+    await client.executeMultiple(createTablesSQL);
 
     // Initialize default hourly rate if not exists
-    const existingRate = await this.client.execute({
+    const existingRate = await client.execute({
       sql: 'SELECT value FROM settings WHERE key = ?',
       args: ['hourly_rate']
     });
 
     if (existingRate.rows.length === 0) {
-      await this.client.execute({
+      await client.execute({
         sql: 'INSERT INTO settings (key, value) VALUES (?, ?)',
         args: ['hourly_rate', '50000']
       });
@@ -57,7 +90,8 @@ class TursoDatabase {
   }
 
   async addEntry(date: string, hours: number, mode: 'add' | 'replace' = 'add'): Promise<EntryChange> {
-    const existingResult = await this.client.execute({
+    const client = this.getClient();
+    const existingResult = await client.execute({
       sql: 'SELECT id, hours FROM entries WHERE date = ?',
       args: [date]
     });
@@ -67,7 +101,7 @@ class TursoDatabase {
     if (existing) {
       if (mode === 'add') {
         const newHours = Number(existing.hours) + hours;
-        await this.client.execute({
+        await client.execute({
           sql: 'UPDATE entries SET hours = ?, updated_at = CURRENT_TIMESTAMP WHERE date = ?',
           args: [newHours, date]
         });
@@ -77,7 +111,7 @@ class TursoDatabase {
           new_value: newHours
         };
       } else {
-        await this.client.execute({
+        await client.execute({
           sql: 'UPDATE entries SET hours = ?, updated_at = CURRENT_TIMESTAMP WHERE date = ?',
           args: [hours, date]
         });
@@ -88,7 +122,7 @@ class TursoDatabase {
         };
       }
     } else {
-      await this.client.execute({
+      await client.execute({
         sql: 'INSERT INTO entries (date, hours) VALUES (?, ?)',
         args: [date, hours]
       });
@@ -101,22 +135,25 @@ class TursoDatabase {
   }
 
   async updateEntry(id: number, date: string, hours: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'UPDATE entries SET date = ?, hours = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       args: [date, hours, id]
     });
   }
 
   async deleteEntry(id: number): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'DELETE FROM entries WHERE id = ?',
       args: [id]
     });
   }
 
   async getEntries(): Promise<HourEntry[]> {
-    const result = await this.client.execute('SELECT * FROM entries ORDER BY date DESC');
-    return result.rows.map(row => ({
+    const client = this.getClient();
+    const result = await client.execute('SELECT * FROM entries ORDER BY date DESC');
+    return result.rows.map((row: Record<string, unknown>) => ({
       id: Number(row.id),
       date: String(row.date),
       hours: Number(row.hours),
@@ -129,20 +166,23 @@ class TursoDatabase {
   }
 
   async getTotalHours(): Promise<number> {
-    const result = await this.client.execute('SELECT COALESCE(SUM(hours), 0) as total FROM entries');
+    const client = this.getClient();
+    const result = await client.execute('SELECT COALESCE(SUM(hours), 0) as total FROM entries');
     return Number(result.rows[0].total);
   }
 
   async getEntryCount(): Promise<number> {
-    const result = await this.client.execute('SELECT COUNT(*) as count FROM entries');
+    const client = this.getClient();
+    const result = await client.execute('SELECT COUNT(*) as count FROM entries');
     return Number(result.rows[0].count);
   }
 
   async getSettings(): Promise<Settings> {
-    const result = await this.client.execute('SELECT key, value FROM settings');
+    const client = this.getClient();
+    const result = await client.execute('SELECT key, value FROM settings');
     const settings: Settings = { hourly_rate: 50000 };
-    
-    for (const row of result.rows) {
+
+  for (const row of result.rows as unknown as Array<{ key: string; value: unknown }>) {
       if (row.key === 'hourly_rate') {
         settings.hourly_rate = Number(row.value);
       }
@@ -152,7 +192,8 @@ class TursoDatabase {
   }
 
   async updateSetting(key: string, value: string): Promise<void> {
-    await this.client.execute({
+    const client = this.getClient();
+    await client.execute({
       sql: 'INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
       args: [key, value]
     });
@@ -163,7 +204,8 @@ class TursoDatabase {
   }
 
   async getWeekdayAverages(): Promise<WeekdayAverage[]> {
-    const result = await this.client.execute(`
+    const client = this.getClient();
+    const result = await client.execute(`
       SELECT 
         CAST(strftime('%w', date) AS INTEGER) as weekday,
         AVG(hours) as average,
@@ -174,7 +216,7 @@ class TursoDatabase {
       ORDER BY weekday
     `);
 
-    return result.rows.map(row => ({
+    return result.rows.map((row: Record<string, unknown>) => ({
       weekday: Number(row.weekday),
       average_hours: Number(row.average),
       company_id: 0
@@ -182,7 +224,8 @@ class TursoDatabase {
   }
 
   async fillWithAverages(startDate: string, endDate: string, overwrite: boolean = false): Promise<EntryChange[]> {
-    const averagesResult = await this.client.execute(`
+    const client = this.getClient();
+    const averagesResult = await client.execute(`
       SELECT 
         CAST(strftime('%w', date) AS INTEGER) as weekday,
         AVG(hours) as average
@@ -207,7 +250,7 @@ class TursoDatabase {
       const averageHours = averages.get(weekday);
 
       if (averageHours !== undefined) {
-        const existingResult = await this.client.execute({
+        const existingResult = await client.execute({
           sql: 'SELECT id, hours FROM entries WHERE date = ?',
           args: [dateStr]
         });
@@ -215,7 +258,7 @@ class TursoDatabase {
         const existing = existingResult.rows[0];
 
         if (!existing) {
-          await this.client.execute({
+          await client.execute({
             sql: 'INSERT INTO entries (date, hours) VALUES (?, ?)',
             args: [dateStr, averageHours]
           });
@@ -225,7 +268,7 @@ class TursoDatabase {
             new_value: averageHours
           });
         } else if (overwrite) {
-          await this.client.execute({
+          await client.execute({
             sql: 'UPDATE entries SET hours = ?, updated_at = CURRENT_TIMESTAMP WHERE date = ?',
             args: [averageHours, dateStr]
           });
@@ -245,9 +288,10 @@ class TursoDatabase {
 
   async bulkCreateEntries(entries: Array<{ date: string; hours: number }>): Promise<EntryChange[]> {
     const changes: EntryChange[] = [];
+    const client = this.getClient();
 
     for (const entry of entries) {
-      const existingResult = await this.client.execute({
+      const existingResult = await client.execute({
         sql: 'SELECT id, hours FROM entries WHERE date = ?',
         args: [entry.date]
       });
@@ -255,7 +299,7 @@ class TursoDatabase {
       const existing = existingResult.rows[0];
 
       if (existing) {
-        await this.client.execute({
+        await client.execute({
           sql: 'UPDATE entries SET hours = ?, updated_at = CURRENT_TIMESTAMP WHERE date = ?',
           args: [entry.hours, entry.date]
         });
@@ -265,7 +309,7 @@ class TursoDatabase {
           new_value: entry.hours
         });
       } else {
-        await this.client.execute({
+        await client.execute({
           sql: 'INSERT INTO entries (date, hours) VALUES (?, ?)',
           args: [entry.date, entry.hours]
         });
