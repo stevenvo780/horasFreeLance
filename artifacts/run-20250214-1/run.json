@@ -1,0 +1,7 @@
+{
+  "timestamp": "2025-02-14T00:00:00Z",
+  "description": "Cleanup de iconos sin uso y ajustes en dashboard",
+  "environment": {
+    "node": "v22.19.0"
+  }
+}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Check, X, Edit, Trash2, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { WEEKDAY_NAMES_ES } from '@/lib/types';
+import { WEEKDAY_NAMES_ES, Company, Project } from '@/lib/types';
 import { formatHours } from '@/lib/formatters';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -14,12 +14,18 @@ interface HourEntry {
   weekdayName: string;
   isEditing?: boolean;
   description?: string;
+  companyId?: number | null;
+  projectId?: number | null;
 }
 
 interface BulkHoursTableProps {
-  onSave: (entries: Array<{date: string, hours: number, description?: string}>) => Promise<void>;
+  onSave: (entries: Array<{date: string, hours: number, companyId: number, projectId: number | null, description?: string}>) => Promise<void>;
   onRefresh: () => void;
-  existingEntries: Array<{id?: number, date: string, hours: number, description?: string}>;
+  existingEntries: Array<{id?: number, date: string, hours: number, description?: string, company_id?: number, project_id?: number | null}>;
+  companies: Company[];
+  defaultCompanyId?: number;
+  projects: Project[];
+  defaultProjectId?: number | null;
 }
 
 const normalizeStartOfDay = (value: Date) => {
@@ -45,7 +51,7 @@ const getSunday = (value: Date) => {
   return normalizeStartOfDay(sunday);
 };
 
-export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: BulkHoursTableProps) {
+export default function BulkHoursTable({ onSave, onRefresh, existingEntries, companies, defaultCompanyId, projects, defaultProjectId }: BulkHoursTableProps) {
   // Hook de autenticación
   const { getAuthHeaders } = useAuth();
   
@@ -58,11 +64,73 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
   // Estados CRUD
   const [entries, setEntries] = useState<HourEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<HourEntry | null>(null);
-  const [newEntry, setNewEntry] = useState<{ date: string; hours: string }>({ date: '', hours: '' });
+  const [newEntry, setNewEntry] = useState<{ date: string; hours: string; projectId: number | '' }>({
+    date: '',
+    hours: '',
+    projectId: defaultProjectId ?? ''
+  });
   const [loading, setLoading] = useState(false);
   
   // Estado para asignación masiva
   const [showBulkMode, setShowBulkMode] = useState(false);
+
+  const projectById = useMemo(() => {
+    const map = new Map<number, Project>();
+    projects.forEach((project) => {
+      if (project.id != null) {
+        map.set(project.id, project);
+      }
+    });
+    return map;
+  }, [projects]);
+
+  const projectOptions = useMemo<Project[]>(() => projects.filter((project) => project.id != null), [projects]);
+
+  const companyNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    companies.forEach((company) => {
+      if (company.id != null) {
+        map.set(company.id, company.name);
+      }
+    });
+    return map;
+  }, [companies]);
+
+  const effectiveDefaultProjectId = useMemo(() => {
+    if (defaultProjectId != null) {
+      return defaultProjectId;
+    }
+    const firstProject = projects.find((project) => project.id != null);
+    return firstProject?.id ?? null;
+  }, [defaultProjectId, projects]);
+
+  useEffect(() => {
+    setNewEntry((prev) => ({
+      ...prev,
+      projectId: prev.projectId === '' ? (effectiveDefaultProjectId ?? '') : prev.projectId
+    }));
+  }, [effectiveDefaultProjectId]);
+
+  const effectiveDefaultCompanyId = useMemo(() => {
+    if (defaultCompanyId) {
+      return defaultCompanyId;
+    }
+
+    if (effectiveDefaultProjectId != null) {
+      const project = projects.find((item) => item.id === effectiveDefaultProjectId);
+      if (project) {
+        return project.company_id;
+      }
+    }
+
+    const fallbackProject = projects.find((project) => project.id != null);
+    if (fallbackProject) {
+      return fallbackProject.company_id;
+    }
+
+    const firstCompany = companies.find((company) => company.id != null);
+    return firstCompany?.id ?? null;
+  }, [companies, defaultCompanyId, effectiveDefaultProjectId, projects]);
 
   // Convertir entradas existentes a formato interno
   useEffect(() => {
@@ -77,7 +145,9 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
         weekday,
         weekdayName: WEEKDAY_NAMES_ES[weekday],
         isEditing: false,
-        description: entry.description ?? ''
+        description: entry.description ?? '',
+        companyId: entry.company_id,
+        projectId: entry.project_id ?? null
       };
     });
     
@@ -118,7 +188,11 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
 
   // Funciones CRUD
   const handleEdit = (entry: HourEntry) => {
-    setEditingEntry({ ...entry });
+    setEditingEntry({
+      ...entry,
+      projectId: entry.projectId ?? null,
+      companyId: entry.companyId ?? null
+    });
   };
 
   const handleCancelEdit = () => {
@@ -127,6 +201,11 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
 
   const handleSaveEdit = async () => {
     if (!editingEntry) return;
+
+    if (editingEntry.projectId == null) {
+      alert('Selecciona un proyecto antes de guardar la entrada.');
+      return;
+    }
     
     setLoading(true);
     try {
@@ -138,7 +217,8 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
           id: editingEntry.id,
           date: editingEntry.date,
           hours: editingEntry.hours,
-          description: ''
+          description: editingEntry.description ?? '',
+          project_id: editingEntry.projectId ?? null
         }),
       });
 
@@ -198,11 +278,30 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
       alert('Las horas deben ser mayor que 0');
       return;
     }
+
+    const projectValue = newEntry.projectId;
+    const projectId = projectValue === '' ? null : Number(projectValue);
+    if (projectId == null || Number.isNaN(projectId)) {
+      alert('Selecciona un proyecto antes de agregar horas.');
+      return;
+    }
+
+    const project = projectById.get(projectId);
+    if (!project) {
+      alert('Proyecto inválido. Actualiza la página e intenta de nuevo.');
+      return;
+    }
+
+    const targetCompanyId = project.company_id ?? effectiveDefaultCompanyId;
+    if (targetCompanyId == null) {
+      alert('Debes seleccionar una empresa antes de agregar horas.');
+      return;
+    }
     
     setLoading(true);
     try {
-      await onSave([{ date: newEntry.date, hours }]);
-      setNewEntry({ date: '', hours: '' });
+      await onSave([{ date: newEntry.date, hours, companyId: targetCompanyId, projectId }]);
+      setNewEntry({ date: '', hours: '', projectId });
       onRefresh();
     } catch (err) {
       console.error('Error al agregar la entrada:', err);
@@ -218,6 +317,11 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
   }, [startDate, endDate, itemsPerPage]);
 
   const handleOpenBulkMode = () => {
+    if (!effectiveDefaultCompanyId) {
+      alert('Necesitas seleccionar o crear una empresa antes de usar la asignación masiva.');
+      return;
+    }
+
     if (!startDate || !endDate) {
       const today = new Date();
       const defaultStart = toISODate(getMonday(today));
@@ -328,7 +432,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
               <Plus className="h-5 w-5 mr-2" />
               Agregar Nueva Entrada
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-1">Fecha</label>
                 <input
@@ -337,6 +441,28 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                   onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-1">Proyecto</label>
+                <select
+                  value={newEntry.projectId}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? '' : Number(e.target.value);
+                    setNewEntry({ ...newEntry, projectId: value });
+                  }}
+                  disabled={projectOptions.length === 0}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                >
+                  <option value="">Selecciona un proyecto…</option>
+                  {projectOptions.map((project) => (
+                    <option key={project.id} value={project.id ?? ''}>
+                      {project.name}
+                      {project.company_id && companyNameById.get(project.company_id)
+                        ? ` · ${companyNameById.get(project.company_id)}`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-1">Horas</label>
@@ -353,7 +479,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
               <div className="flex items-end">
                 <button
                   onClick={handleAdd}
-                  disabled={loading}
+                  disabled={loading || projectOptions.length === 0}
                   className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors"
                 >
                   {loading ? 'Guardando...' : 'Agregar'}
@@ -369,6 +495,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                 <tr>
                   <th className="text-left py-3 px-4 font-medium text-gray-900">Fecha</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-900">Día</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">Proyecto</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-900">Horas</th>
                   <th className="text-center py-3 px-4 font-medium text-gray-900">Acciones</th>
                 </tr>
@@ -383,6 +510,46 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
                       }`}>
                         {entry.weekdayName}
                       </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {editingEntry?.id === entry.id ? (
+                        <select
+                          value={editingEntry?.projectId ?? ''}
+                          onChange={(e) => {
+                            if (!editingEntry) return;
+
+                            const value = e.target.value === '' ? null : Number(e.target.value);
+                            if (value == null || Number.isNaN(value)) {
+                              setEditingEntry({ ...editingEntry, projectId: null, companyId: null });
+                              return;
+                            }
+
+                            const project = projectById.get(value);
+                            setEditingEntry({
+                              ...editingEntry,
+                              projectId: value,
+                              companyId: project?.company_id ?? editingEntry.companyId ?? null
+                            });
+                          }}
+                          className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Selecciona un proyecto…</option>
+                          {projectOptions.map((project) => (
+                            <option key={project.id} value={project.id ?? ''}>
+                              {project.name}
+                              {project.company_id && companyNameById.get(project.company_id)
+                                ? ` · ${companyNameById.get(project.company_id)}`
+                                : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-sm text-gray-900">
+                          {entry.projectId != null
+                            ? projectById.get(entry.projectId)?.name ?? 'Proyecto desconocido'
+                            : 'Sin proyecto'}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {editingEntry?.id === entry.id ? (
@@ -497,6 +664,11 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries }: B
               onSave={onSave}
               onRefresh={onRefresh}
               onClose={() => setShowBulkMode(false)}
+              companies={companies}
+              defaultCompanyId={effectiveDefaultCompanyId}
+              projects={projects}
+              projectById={projectById}
+              defaultProjectId={effectiveDefaultProjectId}
             />
           )}
 
@@ -517,6 +689,10 @@ interface BulkDayCell {
   isExisting: boolean;
   existingHours?: number;
   existingDescription?: string;
+  companyId: number | null;
+  existingCompanyId?: number | null;
+  projectId: number | null;
+  existingProjectId?: number | null;
 }
 
 type BulkWeekRow = BulkDayCell[];
@@ -525,9 +701,14 @@ interface BulkAssignmentModalProps {
   startDate: string;
   endDate: string;
   existingEntries: HourEntry[];
-  onSave: (entries: Array<{date: string, hours: number, description?: string}>) => Promise<void>;
+  onSave: (entries: Array<{date: string, hours: number, companyId: number, projectId: number | null, description?: string}>) => Promise<void>;
   onRefresh: () => void;
   onClose: () => void;
+  companies: Company[];
+  defaultCompanyId: number | null;
+  projects: Project[];
+  projectById: Map<number, Project>;
+  defaultProjectId: number | null;
 }
 
 const getWeekdayIndex = (value: Date) => {
@@ -541,10 +722,81 @@ function BulkAssignmentModal({
   existingEntries,
   onSave,
   onRefresh,
-  onClose
+  onClose,
+  companies,
+  defaultCompanyId,
+  projects,
+  projectById,
+  defaultProjectId
 }: BulkAssignmentModalProps) {
   const [weeks, setWeeks] = useState<BulkWeekRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  const modalProjectOptions = useMemo<Project[]>(() => projects.filter((project) => project.id != null), [projects]);
+
+  const modalCompanyNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    companies.forEach((company) => {
+      if (company.id != null) {
+        map.set(company.id, company.name);
+      }
+    });
+    return map;
+  }, [companies]);
+
+  const fallbackProjectId = useMemo(() => {
+    if (defaultProjectId != null) {
+      return defaultProjectId;
+    }
+    const firstProject = projects.find((project) => project.id != null);
+    return firstProject?.id ?? null;
+  }, [defaultProjectId, projects]);
+
+  const fallbackCompanyId = useMemo(() => {
+    if (fallbackProjectId != null) {
+      const project = projectById.get(fallbackProjectId);
+      if (project) {
+        return project.company_id;
+      }
+    }
+
+    if (defaultCompanyId != null) {
+      return defaultCompanyId;
+    }
+
+    const firstCompany = companies.find((company) => company.id != null);
+    return firstCompany?.id ?? null;
+  }, [companies, defaultCompanyId, fallbackProjectId, projectById]);
+
+  const [bulkProjectId, setBulkProjectId] = useState<number | null>(fallbackProjectId);
+
+  useEffect(() => {
+    setBulkProjectId(fallbackProjectId);
+  }, [fallbackProjectId]);
+
+  const applyProjectToAllDays = () => {
+    if (bulkProjectId == null) {
+      alert('Selecciona un proyecto para aplicar.');
+      return;
+    }
+
+    const project = projectById.get(bulkProjectId);
+    if (!project) {
+      alert('Proyecto no válido. Actualiza la página e intenta de nuevo.');
+      return;
+    }
+
+    setWeeks((prev) =>
+      prev.map((week) =>
+        week.map((day) => {
+          if (!day.isDisabled && !day.isExisting && day.projectId == null) {
+            return { ...day, projectId: bulkProjectId, companyId: project.company_id };
+          }
+          return day;
+        })
+      )
+    );
+  };
 
   const range = useMemo(() => {
     const parseDate = (value?: string) => {
@@ -620,9 +872,15 @@ function BulkAssignmentModal({
       for (let index = 0; index < 7; index++) {
         const dayDate = new Date(weekStart);
         dayDate.setDate(weekStart.getDate() + index);
-  const isoDate = toISODate(dayDate);
-  const withinRange = dayDate >= rangeStart && dayDate <= rangeEnd;
-  const existingEntry = existingEntriesMap.get(isoDate);
+        const isoDate = toISODate(dayDate);
+        const withinRange = dayDate >= rangeStart && dayDate <= rangeEnd;
+        const existingEntry = existingEntriesMap.get(isoDate);
+        const isExisting = Boolean(existingEntry);
+        const existingProjectId = existingEntry?.projectId ?? null;
+        const projectId = existingProjectId ?? fallbackProjectId ?? null;
+        const project = projectId != null ? projectById.get(projectId) : null;
+        const companyId = existingEntry?.companyId ?? project?.company_id ?? fallbackCompanyId ?? null;
+        const isDisabled = !withinRange || isExisting;
 
         weekCells.push({
           key: `${isoDate}-${index}`,
@@ -632,10 +890,14 @@ function BulkAssignmentModal({
           hours: '',
           description: '',
           showDescription: false,
-          isDisabled: !withinRange || Boolean(existingEntry),
-          isExisting: Boolean(existingEntry),
+          isDisabled,
+          isExisting,
           existingHours: existingEntry?.hours,
-          existingDescription: existingEntry?.description || ''
+          existingDescription: existingEntry?.description || '',
+          companyId,
+          existingCompanyId: existingEntry?.companyId,
+          projectId,
+          existingProjectId
         });
       }
 
@@ -643,7 +905,7 @@ function BulkAssignmentModal({
     }
 
     setWeeks(newWeeks);
-  }, [existingEntriesMap, rangeEnd, rangeStart]);
+  }, [existingEntriesMap, fallbackCompanyId, fallbackProjectId, projectById, rangeEnd, rangeStart]);
 
   const updateHours = (weekIndex: number, dayIndex: number, value: string) => {
     setWeeks((prev) =>
@@ -664,6 +926,29 @@ function BulkAssignmentModal({
         week.map((day, di) => {
           if (wi === weekIndex && di === dayIndex) {
             return { ...day, description: value };
+          }
+          return day;
+        })
+      )
+    );
+  };
+
+  const updateProjectSelection = (weekIndex: number, dayIndex: number, value: string) => {
+    const parsed = value === '' ? null : Number(value);
+    setWeeks((prev) =>
+      prev.map((week, wi) =>
+        week.map((day, di) => {
+          if (wi === weekIndex && di === dayIndex) {
+            if (parsed == null || Number.isNaN(parsed)) {
+              return { ...day, projectId: null, companyId: null };
+            }
+
+            const project = projectById.get(parsed);
+            if (!project) {
+              return { ...day, projectId: null, companyId: null };
+            }
+
+            return { ...day, projectId: parsed, companyId: project.company_id };
           }
           return day;
         })
@@ -724,8 +1009,9 @@ function BulkAssignmentModal({
   const handleBulkSave = async () => {
     setIsLoading(true);
     try {
-      const invalidDates: string[] = [];
-      const entriesToSave: Array<{ date: string; hours: number; description?: string }> = [];
+  const invalidDates: string[] = [];
+  const missingProjects: string[] = [];
+  const entriesToSave: Array<{ date: string; hours: number; companyId: number; projectId: number | null; description?: string }> = [];
 
       weeks.forEach((week) => {
         week.forEach((day) => {
@@ -742,10 +1028,25 @@ function BulkAssignmentModal({
             return;
           }
 
+          if (!day.projectId) {
+            missingProjects.push(day.dayLabel || day.date);
+            return;
+          }
+
+          const project = projectById.get(day.projectId);
+          const projectCompanyId = project?.company_id ?? day.companyId;
+
+          if (!projectCompanyId) {
+            missingProjects.push(day.dayLabel || day.date);
+            return;
+          }
+
           const rounded = Math.round(parsed * 4) / 4;
           entriesToSave.push({
             date: day.date,
             hours: rounded,
+            companyId: projectCompanyId,
+            projectId: day.projectId,
             description: day.description.trim() || undefined
           });
         });
@@ -756,12 +1057,18 @@ function BulkAssignmentModal({
         return;
       }
 
+      if (missingProjects.length > 0) {
+        const uniqueProjects = Array.from(new Set(missingProjects));
+        alert(`Selecciona un proyecto para: ${uniqueProjects.join(', ')}.`);
+        return;
+      }
+
       if (entriesToSave.length === 0) {
         alert('No hay horas válidas para guardar. Agrega valores mayores a 0.');
         return;
       }
 
-      await onSave(entriesToSave);
+  await onSave(entriesToSave);
       onRefresh();
       onClose();
     } catch (error) {
@@ -799,7 +1106,7 @@ function BulkAssignmentModal({
           </button>
         </div>
 
-        <div className="px-6 py-4 flex flex-wrap gap-3 border-b border-gray-200">
+        <div className="px-6 py-4 flex flex-wrap items-center gap-3 border-b border-gray-200">
           <button
             type="button"
             onClick={fillWithHistoricalAverage}
@@ -814,6 +1121,36 @@ function BulkAssignmentModal({
           >
             Limpiar horas
           </button>
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-gray-700">
+            <label htmlFor="bulk-project" className="font-medium">Proyecto predeterminado</label>
+            <select
+              id="bulk-project"
+              value={bulkProjectId ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                const parsed = value === '' ? null : Number(value);
+                setBulkProjectId(parsed !== null && !Number.isNaN(parsed) ? parsed : null);
+              }}
+              className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecciona un proyecto…</option>
+              {modalProjectOptions.map((project) => (
+                <option key={project.id} value={project.id ?? ''}>
+                  {project.name}
+                  {project.company_id && modalCompanyNameById.get(project.company_id)
+                    ? ` · ${modalCompanyNameById.get(project.company_id)}`
+                    : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={applyProjectToAllDays}
+              className="rounded-md border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+            >
+              Aplicar a días vacíos
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
@@ -844,8 +1181,31 @@ function BulkAssignmentModal({
                         )}
                       </div>
 
-                      {!day.isDisabled ? (
+                      {day.isDisabled ? (
+                        <p className="mt-3 text-xs text-gray-500">
+                          {day.isExisting
+                            ? `Registrado: ${formatHours(day.existingHours || 0)}${day.existingProjectId != null ? ` · ${projectById.get(day.existingProjectId)?.name ?? 'Proyecto desconocido'}` : ''}`
+                            : 'Fecha fuera del rango seleccionado'}
+                        </p>
+                      ) : (
                         <>
+                          <label className="mt-2 block text-xs font-medium text-gray-700">Proyecto</label>
+                          <select
+                            value={day.projectId ?? ''}
+                            onChange={(e) => updateProjectSelection(weekIndex, dayIndex, e.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Selecciona un proyecto…</option>
+                            {modalProjectOptions.map((project) => (
+                              <option key={project.id} value={project.id ?? ''}>
+                                {project.name}
+                                {project.company_id && modalCompanyNameById.get(project.company_id)
+                                  ? ` · ${modalCompanyNameById.get(project.company_id)}`
+                                  : ''}
+                              </option>
+                            ))}
+                          </select>
+
                           <input
                             type="number"
                             inputMode="decimal"
@@ -875,12 +1235,6 @@ function BulkAssignmentModal({
                             />
                           )}
                         </>
-                      ) : (
-                        <p className="mt-3 text-xs text-gray-500">
-                          {day.isExisting
-                            ? `Registrado: ${formatHours(day.existingHours || 0)}`
-                            : 'Fecha fuera del rango seleccionado'}
-                        </p>
                       )}
                     </>
                   ) : (

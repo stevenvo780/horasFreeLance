@@ -1,18 +1,18 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Calendar, Clock, DollarSign, TrendingUp, TrendingDown, 
+  Calendar, Clock, DollarSign, TrendingUp,
   BarChart3, AlertCircle, CheckCircle,
-  Settings, Target, Zap, ArrowUp, ArrowDown, Minus, LogOut,
-  Building2, Plus, Users
+  ArrowUp, ArrowDown, Minus, LogOut,
+  Building2, Plus, Target, Zap
 } from 'lucide-react';
-import { HourEntry, Company, WeekdayAverage } from '@/lib/types';
+import { HourEntry, Company, WeekdayAverage, Project } from '@/lib/types';
 import { formatPrice, formatHours } from '@/lib/formatters';
 import { 
   analyzeTrends, getMissingDaysThisWeek, getProductivityByWeekday, 
-  formatHoursDiff, formatPercentageDiff, TrendAnalysis 
+  formatHoursDiff 
 } from '@/lib/analytics';
 import { useAuth } from '@/hooks/useAuth';
 import BulkHoursTable from '@/components/BulkHoursTable';
@@ -20,22 +20,40 @@ import BulkHoursTable from '@/components/BulkHoursTable';
 interface AppData {
   entries: HourEntry[];
   companies: Company[];
+  projects: Project[];
   weekday_averages: WeekdayAverage[];
   total_hours: number;
   entry_count: number;
 }
 
 export default function Dashboard() {
-  const { user, token, logout, getAuthHeaders, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, logout, getAuthHeaders, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table'>('dashboard');
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [showNewCompanyForm, setShowNewCompanyForm] = useState(false);
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newCompanyRate, setNewCompanyRate] = useState('');
+  const [newProjectName, setNewProjectName] = useState('');
+  const [dashboardStartDate, setDashboardStartDate] = useState('');
+  const [dashboardEndDate, setDashboardEndDate] = useState('');
+
+  const selectedCompany = useMemo(() => {
+    if (!data?.companies || selectedCompanyId == null) return null;
+    return data.companies.find(company => company.id === selectedCompanyId) ?? null;
+  }, [data?.companies, selectedCompanyId]);
+
+  const projects = useMemo(() => data?.projects ?? [], [data?.projects]);
+
+  const activeProjects = useMemo(() => {
+    if (selectedCompanyId == null) return projects;
+    return projects.filter(project => project.company_id === selectedCompanyId);
+  }, [projects, selectedCompanyId]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -44,47 +62,104 @@ export default function Dashboard() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Calcular analytics con useMemo para optimizar rendimiento
+  const filteredEntries = useMemo(() => {
+    if (!data?.entries) return [];
+    let entries = [...data.entries];
+
+    if (dashboardStartDate) {
+      entries = entries.filter(entry => entry.date >= dashboardStartDate);
+    }
+
+    if (dashboardEndDate) {
+      entries = entries.filter(entry => entry.date <= dashboardEndDate);
+    }
+
+    return entries;
+  }, [data?.entries, dashboardStartDate, dashboardEndDate]);
+
+  const totalHours = useMemo(() => {
+    return filteredEntries.reduce((sum, entry) => sum + entry.hours, 0);
+  }, [filteredEntries]);
+
+  const totalEntries = filteredEntries.length;
+
+  const totalEarnings = selectedCompany?.hourly_rate
+    ? filteredEntries.reduce((sum, entry) => sum + entry.hours * selectedCompany.hourly_rate, 0)
+    : 0;
+
   const analytics = useMemo(() => {
-    if (!data?.entries || !selectedCompany?.hourly_rate) return null;
-    return analyzeTrends(data.entries, selectedCompany.hourly_rate);
-  }, [data?.entries, selectedCompany?.hourly_rate]);
+    if (!filteredEntries.length || !selectedCompany?.hourly_rate) return null;
+    return analyzeTrends(filteredEntries, selectedCompany.hourly_rate);
+  }, [filteredEntries, selectedCompany?.hourly_rate]);
 
   const missingDays = useMemo(() => {
-    if (!data?.entries) return [];
-    return getMissingDaysThisWeek(data.entries);
-  }, [data?.entries]);
+    if (!filteredEntries.length) return [];
+    return getMissingDaysThisWeek(filteredEntries);
+  }, [filteredEntries]);
 
   const productivityByWeekday = useMemo(() => {
-    if (!data?.entries) return [];
-    return getProductivityByWeekday(data.entries);
-  }, [data?.entries]);
+    if (!filteredEntries.length) return [];
+    return getProductivityByWeekday(filteredEntries);
+  }, [filteredEntries]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async (companyIdOverride?: number | null) => {
     try {
       if (!isAuthenticated) return;
-      
-      const url = selectedCompany 
-        ? `/api/status?company_id=${selectedCompany.id}`
+
+      setLoading(true);
+
+      const effectiveCompanyId = companyIdOverride ?? selectedCompanyId ?? null;
+      const url = effectiveCompanyId
+        ? `/api/status?company_id=${effectiveCompanyId}`
         : '/api/status';
-        
+
       const response = await fetch(url, {
         headers: getAuthHeaders()
       });
-      
+
       if (response.status === 401) {
         logout();
         return;
       }
-      
+
       const result = await response.json();
-      
+
       if (result.status === 'ok') {
-        setData(result.data);
-        
-        // Set default company if none selected and companies exist
-        if (!selectedCompany && result.data.companies?.length > 0) {
-          setSelectedCompany(result.data.companies[0]);
+        const payload: AppData = result.data;
+        setData(payload);
+        setError(null);
+
+        const availableCompanies = payload.companies ?? [];
+        let nextCompanyId = selectedCompanyId;
+
+        if (availableCompanies.length === 0) {
+          nextCompanyId = null;
+        } else if (effectiveCompanyId && availableCompanies.some(company => company.id === effectiveCompanyId)) {
+          nextCompanyId = effectiveCompanyId;
+        } else if (nextCompanyId == null || !availableCompanies.some(company => company.id === nextCompanyId)) {
+          nextCompanyId = availableCompanies[0]?.id ?? null;
+        }
+
+        if (nextCompanyId !== selectedCompanyId) {
+          setSelectedCompanyId(nextCompanyId);
+        }
+
+        const availableProjects = payload.projects ?? [];
+        const currentProject = selectedProjectId != null
+          ? availableProjects.find(project => project.id === selectedProjectId)
+          : null;
+
+        let nextProjectId = selectedProjectId;
+
+        if (!currentProject || (nextCompanyId != null && currentProject.company_id !== nextCompanyId)) {
+          const fallbackProject = nextCompanyId != null
+            ? availableProjects.find(project => project.company_id === nextCompanyId)
+            : availableProjects[0];
+          nextProjectId = fallbackProject?.id ?? null;
+        }
+
+        if (nextProjectId !== selectedProjectId) {
+          setSelectedProjectId(nextProjectId);
         }
       } else {
         setError(result.message);
@@ -94,13 +169,13 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getAuthHeaders, isAuthenticated, logout, selectedCompanyId, selectedProjectId]);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
     }
-  }, [isAuthenticated, selectedCompany]);
+  }, [fetchData, isAuthenticated, selectedCompanyId]);
 
   const createCompany = async () => {
     if (!newCompanyName) return;
@@ -116,33 +191,60 @@ export default function Dashboard() {
       });
       
       if (response.ok) {
+        const result = await response.json();
+        const createdCompanyId: number | null = result?.data?.id ?? null;
         setNewCompanyName('');
         setNewCompanyRate('');
         setShowNewCompanyForm(false);
-        await fetchData();
+        if (createdCompanyId != null) {
+          setSelectedCompanyId(createdCompanyId);
+        }
+        await fetchData(createdCompanyId ?? undefined);
       }
     } catch (error) {
       console.error('Error creating company:', error);
     }
   };
 
-  const updateRate = async () => {
-    if (!selectedCompany) return;
-    
+  const createProject = async () => {
+    const targetCompanyId = selectedCompany?.id ?? selectedCompanyId;
+    if (!newProjectName.trim() || targetCompanyId == null) {
+      return;
+    }
+
     try {
-      // Here we would update the company's hourly rate
-      // For now, we'll just refresh the data
-      await fetchData();
-    } catch {
-      alert('Error al actualizar tarifa');
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: newProjectName.trim(),
+          company_id: targetCompanyId
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const createdProjectId: number | null = result?.data?.id ?? null;
+
+        setNewProjectName('');
+        setShowNewProjectForm(false);
+
+        if (createdProjectId != null) {
+          setSelectedProjectId(createdProjectId);
+        }
+
+        await fetchData(targetCompanyId);
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
     }
   };
 
-  const handleBulkSave = async (entries: Array<{date: string, hours: number, description?: string}>) => {
-    if (!selectedCompany) {
-      throw new Error('Selecciona una empresa primero');
+  const handleBulkSave = async (entries: Array<{date: string, hours: number, companyId: number, projectId: number | null, description?: string}>) => {
+    if (!entries.length) {
+      return;
     }
-    
+
     try {
       // Procesar cada entrada individualmente con mejor manejo de errores
       const results = [];
@@ -160,7 +262,8 @@ export default function Dashboard() {
             body: JSON.stringify({
               date: entry.date,
               hours: entry.hours,
-              company_id: selectedCompany.id,
+              company_id: entry.companyId,
+              project_id: entry.projectId,
               description: entry.description ?? ''
             })
           });
@@ -237,8 +340,6 @@ export default function Dashboard() {
     );
   }
 
-  const totalEarnings = selectedCompany?.hourly_rate && data?.total_hours ? data.total_hours * selectedCompany.hourly_rate : 0;
-
   // Función para renderizar icono de tendencia
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     switch (trend) {
@@ -251,25 +352,28 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-gradient-to-r from-gray-800 to-gray-700 text-white py-6">
+      <header className="bg-gradient-to-r from-gray-100 via-white to-gray-50 border-b border-gray-200 py-6">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 style={{
-                fontSize: '1.5rem',
-                fontWeight: '600',
-                color: '#f3f4f6',
-              }}>Panel de Control</h1>
+              <h1
+                style={{
+                  fontSize: '1.5rem',
+                  fontWeight: '600',
+                }}
+              >
+                Panel de Control
+              </h1>
               <p className="text-gray-800">
-                Bienvenido, {user?.first_name} {user?.last_name}
+                Bienvenido, {user?.name}
                 {selectedCompany && (
-                  <span className="ml-2 text-blue-200">• {selectedCompany.name}</span>
+                  <span className="ml-2 text-gray-900">• {selectedCompany.name}</span>
                 )}
               </p>
             </div>
             <button
               onClick={logout}
-              className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white"
             >
               <LogOut className="h-5 w-5 mr-2" />
               Cerrar Sesión
@@ -309,6 +413,55 @@ export default function Dashboard() {
       <div className="container mx-auto px-4 py-8">
         {activeTab === 'dashboard' && (
           <>
+            {/* Filtros del Dashboard */}
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha inicio</label>
+                  <input
+                    type="date"
+                    value={dashboardStartDate}
+                    onChange={(e) => setDashboardStartDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    max={dashboardEndDate || undefined}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha fin</label>
+                  <input
+                    type="date"
+                    value={dashboardEndDate}
+                    onChange={(e) => setDashboardEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min={dashboardStartDate || undefined}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      setDashboardStartDate('');
+                      setDashboardEndDate('');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 transition-colors"
+                    disabled={!dashboardStartDate && !dashboardEndDate}
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 bg-gray-50">
+                    <span className="font-semibold text-gray-900">{totalEntries}</span> {totalEntries === 1 ? 'registro' : 'registros'}
+                    <span className="ml-2">· {formatHours(totalHours)} horas</span>
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 bg-gray-50">
+                    Ingresos estimados: <span className="font-semibold text-gray-900">{formatPrice(totalEarnings)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Resumen Principal */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <div className="bg-white rounded-lg shadow p-6">
@@ -317,7 +470,7 @@ export default function Dashboard() {
                     <Clock className="h-8 w-8 text-blue-600" />
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-800">Total Horas</p>
-                      <p className="text-2xl font-bold text-gray-900">{formatHours(data?.total_hours || 0)}</p>
+                      <p className="text-2xl font-bold text-gray-900">{formatHours(totalHours)}</p>
                     </div>
                   </div>
                 </div>
@@ -329,7 +482,7 @@ export default function Dashboard() {
                     <Calendar className="h-8 w-8 text-green-600" />
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-800">Días Registrados</p>
-                      <p className="text-2xl font-bold text-gray-900">{data?.entry_count || 0}</p>
+                      <p className="text-2xl font-bold text-gray-900">{totalEntries}</p>
                     </div>
                   </div>
                 </div>
@@ -443,10 +596,10 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   {missingDays.length > 0 ? (
                     <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
-                      <p className="text-sm font-medium text-orange-800">
+                      <p className="text-sm font-medium text-gray-900">
                         Días sin registrar esta semana: {missingDays.length}
                       </p>
-                      <p className="text-xs text-orange-600 mt-1">
+                      <p className="text-xs text-gray-900 mt-1">
                         {missingDays.slice(0, 3).join(', ')}
                         {missingDays.length > 3 && ` y ${missingDays.length - 3} más`}
                       </p>
@@ -498,10 +651,22 @@ export default function Dashboard() {
                       Empresa Activa
                     </label>
                     <select
-                      value={selectedCompany?.id || ''}
+                      value={selectedCompanyId ?? ''}
                       onChange={(e) => {
-                        const company = data?.companies.find(c => c.id === parseInt(e.target.value));
-                        setSelectedCompany(company || null);
+                        const value = e.target.value === '' ? null : Number(e.target.value);
+                        setSelectedCompanyId(value);
+
+                        if (value != null) {
+                          const projectsForCompany = (data?.projects ?? []).filter(project => project.company_id === value);
+                          setSelectedProjectId(prev => {
+                            if (prev != null && projectsForCompany.some(project => project.id === prev)) {
+                              return prev;
+                            }
+                            return projectsForCompany[0]?.id ?? null;
+                          });
+                        } else {
+                          setSelectedProjectId(null);
+                        }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
@@ -547,6 +712,88 @@ export default function Dashboard() {
                           Cancelar
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {selectedCompany && (
+                    <div className="border-t pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-gray-800">
+                          Proyectos de {selectedCompany.name}
+                        </h4>
+                        <button
+                          onClick={() => {
+                            if (!selectedCompany?.id) {
+                              alert('Crea o selecciona una empresa antes de agregar proyectos.');
+                              return;
+                            }
+                            setShowNewProjectForm(prev => !prev);
+                          }}
+                          className="px-3 py-1 text-xs bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center"
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Nuevo proyecto
+                        </button>
+                      </div>
+
+                      {activeProjects.length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                          No hay proyectos registrados para esta empresa. Crea uno para poder asignar horas.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {activeProjects.map(project => (
+                            <button
+                              key={project.id}
+                              onClick={() => {
+                                if (project.id != null) {
+                                  setSelectedProjectId(project.id);
+                                }
+                              }}
+                              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                                selectedProjectId === project.id
+                                  ? 'border-blue-500 bg-blue-50 text-blue-600'
+                                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200'
+                              }`}
+                            >
+                              {project.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {showNewProjectForm && (
+                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2">
+                          <div className="text-xs text-gray-600">
+                            Empresa seleccionada: <span className="font-semibold text-gray-800">{selectedCompany.name}</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={newProjectName}
+                            onChange={(e) => setNewProjectName(e.target.value)}
+                            placeholder="Nombre del proyecto"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                          />
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={createProject}
+                              disabled={!newProjectName.trim()}
+                              className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-sm"
+                            >
+                              Crear proyecto
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowNewProjectForm(false);
+                                setNewProjectName('');
+                              }}
+                              className="flex-1 px-3 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors text-sm"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -603,7 +850,7 @@ export default function Dashboard() {
                   {data && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-800">Total registros</span>
-                      <span className="font-medium">{data.entry_count}</span>
+                      <span className="font-medium">{totalEntries}</span>
                     </div>
                   )}
                 </div>
@@ -648,6 +895,10 @@ export default function Dashboard() {
             onSave={handleBulkSave}
             onRefresh={fetchData}
             existingEntries={data?.entries || []}
+            companies={data?.companies || []}
+            defaultCompanyId={selectedCompany?.id}
+            projects={projects}
+            defaultProjectId={selectedProjectId}
           />
         )}
       </div>

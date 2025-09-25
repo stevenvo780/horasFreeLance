@@ -40,7 +40,7 @@ export default function LoginPage() {
       } else {
         setError(data.message);
       }
-    } catch (error) {
+    } catch {
       setError('Error de conexión. Inténtalo de nuevo.');
     } finally {
       setLoading(false);

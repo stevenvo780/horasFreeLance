@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { User } from '@/lib/types';
 
@@ -29,7 +29,7 @@ export function useAuth() {
           token,
           loading: false,
         });
-      } catch (error) {
+      } catch {
         // Invalid stored data, clear it
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -48,7 +48,7 @@ export function useAuth() {
     }
   }, []);
 
-  const login = (token: string, user: Omit<User, 'password_hash'>) => {
+  const login = useCallback((token: string, user: Omit<User, 'password_hash'>) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
     setAuthState({
@@ -56,9 +56,9 @@ export function useAuth() {
       token,
       loading: false,
     });
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setAuthState({
@@ -67,9 +67,9 @@ export function useAuth() {
       loading: false,
     });
     router.push('/login');
-  };
+  }, [router]);
 
-  const getAuthHeaders = (): Record<string, string> => {
+  const getAuthHeaders = useCallback((): Record<string, string> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -79,7 +79,7 @@ export function useAuth() {
     }
     
     return headers;
-  };
+  }, [authState.token]);
 
   return {
     ...authState,

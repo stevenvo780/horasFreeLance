@@ -96,7 +96,6 @@ export function analyzeTrends(entries: HourEntry[], hourlyRate: number): TrendAn
   const lastWeek = new Date(now);
   lastWeek.setDate(now.getDate() - 7);
   
-  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
   

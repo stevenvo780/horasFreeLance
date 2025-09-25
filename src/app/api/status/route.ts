@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
     }
     
     // Get companies first
-    const companies = await db.getUserCompanies(userId);
+  const companies = await db.getUserCompanies(userId);
+  const projects = await db.getUserProjects(userId);
     
     // If no company specified but user has companies, use the first one
     let selectedCompanyId = companyIdNum;
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
       data: {
         entries,
         companies,
+        projects,
         weekday_averages: weekdayAverages,
         total_hours: totalHours,
         entry_count: entries.length

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const db = getDatabase();
     
   const body = await request.json();
-  const { date, hours, mode = 'set', company_id, description = '' } = body;
+  const { date, hours, mode = 'set', company_id, project_id = null, description = '' } = body;
 
     if (!date || typeof hours !== 'number' || !company_id) {
       return NextResponse.json({
@@ -58,7 +58,19 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 404 });
     }
 
-  await db.addEntry(date, hours, description, company_id);
+    let projectIdToUse: number | null = null;
+    if (project_id != null) {
+      const project = await db.getProjectById(project_id);
+      if (!project || project.user_id !== userId || project.company_id !== company_id) {
+        return NextResponse.json({
+          status: 'error',
+          message: 'Proyecto no encontrado o sin permisos'
+        } as ApiResponse, { status: 404 });
+      }
+      projectIdToUse = project.id ?? null;
+    }
+
+    await db.addEntry(date, hours, description, company_id, projectIdToUse);
 
     const response: ApiResponse = {
       status: 'ok',
@@ -96,6 +108,8 @@ export async function PUT(request: NextRequest) {
     
     const body = await request.json();
     const { id, date, hours, description = '' } = body;
+    const hasProjectId = Object.prototype.hasOwnProperty.call(body, 'project_id');
+    const projectId = hasProjectId ? body.project_id : undefined;
 
     if (!id || !date || hours === undefined) {
       return NextResponse.json({
@@ -145,7 +159,23 @@ export async function PUT(request: NextRequest) {
       } as ApiResponse, { status: 404 });
     }
 
-    await db.updateEntry(id, date, hours, description);
+    let projectIdToUse: number | null | undefined = projectId;
+    if (hasProjectId) {
+      if (projectId != null) {
+        const project = await db.getProjectById(projectId);
+        if (!project || project.user_id !== userId || project.company_id !== targetCompany.id) {
+          return NextResponse.json({
+            status: 'error',
+            message: 'Proyecto no encontrado o sin permisos'
+          } as ApiResponse, { status: 404 });
+        }
+        projectIdToUse = project.id ?? null;
+      } else {
+        projectIdToUse = null;
+      }
+    }
+
+    await db.updateEntry(id, date, hours, description, projectIdToUse);
 
     const response: ApiResponse = {
       status: 'ok',

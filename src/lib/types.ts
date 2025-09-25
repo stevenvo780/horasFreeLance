@@ -17,12 +17,21 @@ export interface Company {
   created_at?: string;
 }
 
+export interface Project {
+  id?: number;
+  name: string;
+  company_id: number;
+  user_id: number;
+  created_at?: string;
+}
+
 export interface HourEntry {
   id?: number;
   date: string; // ISO date string (YYYY-MM-DD)
   hours: number;
   description?: string;
   company_id: number;
+  project_id?: number | null;
   created_at?: string;
 }
 
@@ -51,6 +60,7 @@ export interface BulkAddRequest {
   mode: 'set' | 'accumulate' | 'error';
   skip_existing?: boolean;
   company_id: number;
+  project_id?: number;
 }
 
 export interface FillAverageRequest {

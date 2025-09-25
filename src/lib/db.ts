@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { HourEntry, Settings, WeekdayAverage, User, Company } from './types';
+import { HourEntry, Settings, WeekdayAverage, User, Company, Project } from './types';
 
 // Use Turso in production, local SQLite in development
 const client = createClient({
@@ -40,6 +40,20 @@ class Database {
         )
       `);
 
+      // Create projects table
+      await this.client.execute(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          company_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+          UNIQUE(name, company_id)
+        )
+      `);
+
       // Create hour_entries table
       await this.client.execute(`
         CREATE TABLE IF NOT EXISTS hour_entries (
@@ -48,10 +62,14 @@ class Database {
           hours REAL NOT NULL,
           description TEXT,
           company_id INTEGER NOT NULL,
+          project_id INTEGER,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE CASCADE
+          FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
         )
       `);
+
+      await this.ensureProjectColumns();
 
       // Create weekday_averages table
       await this.client.execute(`
@@ -74,6 +92,25 @@ class Database {
 
   async close(): Promise<void> {
     await this.client.close();
+  }
+
+  private async ensureProjectColumns(): Promise<void> {
+    try {
+      const result = await this.client.execute({ sql: "PRAGMA table_info('hour_entries')" });
+      const hasProjectColumn = result.rows.some((row) => {
+        const name = (row as Record<string, unknown>).name;
+        return typeof name === 'string' && name === 'project_id';
+      });
+
+      if (!hasProjectColumn) {
+        await this.client.execute({
+          sql: 'ALTER TABLE hour_entries ADD COLUMN project_id INTEGER'
+        });
+      }
+    } catch (error) {
+      console.error('Error ensuring project_id column on hour_entries:', error);
+      throw error;
+    }
   }
 
   // User methods
@@ -140,6 +177,7 @@ class Database {
       id: Number(row.id),
       name: String(row.name),
       hourly_rate: Number(row.hourly_rate),
+      billing_cycle_day: Number(row.billing_cycle_day ?? 1),
       user_id: Number(row.user_id),
       created_at: String(row.created_at)
     }));
@@ -158,6 +196,7 @@ class Database {
       id: Number(row.id),
       name: String(row.name),
       hourly_rate: Number(row.hourly_rate),
+      billing_cycle_day: Number(row.billing_cycle_day ?? 1),
       user_id: Number(row.user_id),
       created_at: String(row.created_at)
     };
@@ -177,11 +216,82 @@ class Database {
     });
   }
 
-  // Hour entries methods
-  async addEntry(date: string, hours: number, description: string, companyId: number): Promise<number> {
+  // Project methods
+  async createProject(name: string, companyId: number, userId: number): Promise<number> {
     const result = await this.client.execute({
-      sql: 'INSERT INTO hour_entries (date, hours, description, company_id) VALUES (?, ?, ?, ?)',
-      args: [date, hours, description, companyId]
+      sql: 'INSERT INTO projects (name, company_id, user_id) VALUES (?, ?, ?)',
+      args: [name, companyId, userId]
+    });
+    return Number(result.lastInsertRowid);
+  }
+
+  async getProjectById(id: number): Promise<Project | null> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM projects WHERE id = ?',
+      args: [id]
+    });
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      id: Number(row.id),
+      name: String(row.name),
+      company_id: Number(row.company_id),
+      user_id: Number(row.user_id),
+      created_at: String(row.created_at)
+    };
+  }
+
+  async getCompanyProjects(companyId: number): Promise<Project[]> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM projects WHERE company_id = ? ORDER BY created_at DESC',
+      args: [companyId]
+    });
+
+    return result.rows.map((row) => ({
+      id: Number(row.id),
+      name: String(row.name),
+      company_id: Number(row.company_id),
+      user_id: Number(row.user_id),
+      created_at: String(row.created_at)
+    }));
+  }
+
+  async getUserProjects(userId: number): Promise<Project[]> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC',
+      args: [userId]
+    });
+
+    return result.rows.map((row) => ({
+      id: Number(row.id),
+      name: String(row.name),
+      company_id: Number(row.company_id),
+      user_id: Number(row.user_id),
+      created_at: String(row.created_at)
+    }));
+  }
+
+  async updateProject(id: number, name: string): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE projects SET name = ? WHERE id = ?',
+      args: [name, id]
+    });
+  }
+
+  async deleteProject(id: number): Promise<void> {
+    await this.client.execute({
+      sql: 'DELETE FROM projects WHERE id = ?',
+      args: [id]
+    });
+  }
+
+  // Hour entries methods
+  async addEntry(date: string, hours: number, description: string, companyId: number, projectId?: number | null): Promise<number> {
+    const result = await this.client.execute({
+      sql: 'INSERT INTO hour_entries (date, hours, description, company_id, project_id) VALUES (?, ?, ?, ?, ?)',
+      args: [date, hours, description, companyId, projectId ?? null]
     });
     return Number(result.lastInsertRowid);
   }
@@ -197,14 +307,23 @@ class Database {
       date: String(row.date),
       hours: Number(row.hours),
       description: String(row.description) || '',
-      company_id: Number(row.company_id)
+      company_id: Number(row.company_id),
+      project_id: row.project_id != null ? Number(row.project_id) : null
     }));
   }
 
-  async updateEntry(id: number, date: string, hours: number, description: string): Promise<void> {
+  async updateEntry(id: number, date: string, hours: number, description: string, projectId?: number | null): Promise<void> {
+    if (typeof projectId === 'undefined') {
+      await this.client.execute({
+        sql: 'UPDATE hour_entries SET date = ?, hours = ?, description = ? WHERE id = ?',
+        args: [date, hours, description, id]
+      });
+      return;
+    }
+
     await this.client.execute({
-      sql: 'UPDATE hour_entries SET date = ?, hours = ?, description = ? WHERE id = ?',
-      args: [date, hours, description, id]
+      sql: 'UPDATE hour_entries SET date = ?, hours = ?, description = ?, project_id = ? WHERE id = ?',
+      args: [date, hours, description, projectId ?? null, id]
     });
   }
 
@@ -223,9 +342,9 @@ class Database {
     return Number(result.rows[0]?.total) || 0;
   }
 
-  async addBulkEntries(entries: { date: string; hours: number; description: string; companyId: number }[]): Promise<void> {
+  async addBulkEntries(entries: { date: string; hours: number; description: string; companyId: number; projectId?: number | null }[]): Promise<void> {
     for (const entry of entries) {
-      await this.addEntry(entry.date, entry.hours, entry.description, entry.companyId);
+      await this.addEntry(entry.date, entry.hours, entry.description, entry.companyId, entry.projectId ?? null);
     }
   }
 
