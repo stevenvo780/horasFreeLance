@@ -6,6 +6,7 @@ Una aplicación moderna de tracking de horas freelance refactorizada de Python a
 
 - 📊 **Dashboard interactivo** con estadísticas en tiempo real
 - 🕒 **Registro de horas** individual y masivo
+- 🧹 **Acciones en lote** para editar o eliminar varios registros a la vez
 - 💰 **Configuración de tarifa** y cálculo de ingresos
 - 📅 **Filtros por días** de la semana para entradas masivas
 - 🔄 **Llenado automático** con promedios por día de la semana
@@ -32,6 +33,12 @@ npm install
 # Ejecutar en desarrollo
 npm run dev
 ```
+
+## Variables de entorno
+
+- Copia `.env.example` a `.env.local` y ajusta los valores para tu entorno.
+- Define siempre `JWT_SECRET` en producción. Si falta en desarrollo se generará uno temporal y los usuarios serán desconectados al reiniciar el servidor.
+- Revisa `ALLOW_INSECURE_AUTH_COOKIE` y `RATE_LIMIT_TRUST_FORWARD_HEADER` solo si necesitas modificar el comportamiento por defecto.
 
 ## Uso
 

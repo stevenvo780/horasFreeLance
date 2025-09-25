@@ -64,6 +64,13 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
   // Estados CRUD
   const [entries, setEntries] = useState<HourEntry[]>([]);
   const [editingEntry, setEditingEntry] = useState<HourEntry | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditValues, setBulkEditValues] = useState<{ hours: string; projectId: number | ''; description: string }>({
+    hours: '',
+    projectId: '',
+    description: ''
+  });
   const [newEntry, setNewEntry] = useState<{ date: string; hours: string; projectId: number | '' }>({
     date: '',
     hours: '',
@@ -152,6 +159,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
     });
     
     setEntries(formattedEntries);
+    setSelectedIds(new Set());
   }, [existingEntries]);
 
   // Filtrar entradas por fecha
@@ -176,6 +184,30 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
   const totalPages = Math.ceil(filteredEntries.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedEntries = filteredEntries.slice(startIndex, startIndex + itemsPerPage);
+
+  // Selección múltiple
+  const pageIds = useMemo(() => paginatedEntries.map((e) => e.id).filter((id): id is number => typeof id === 'number'), [paginatedEntries]);
+  const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelectedOnPage) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+  const toggleSelect = (id?: number) => {
+    if (typeof id !== 'number') return; // No permitir selección sin ID real
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
 
   // Estadísticas
   const stats = useMemo(() => {
@@ -260,6 +292,96 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
       onRefresh(); // Refrescar datos desde el servidor
     } catch (error) {
       alert('Error al eliminar la entrada: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Eliminación múltiple
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`¿Eliminar ${selectedIds.size} registros seleccionados?`)) return;
+
+    setLoading(true);
+    try {
+      let success = 0;
+      for (const entry of entries) {
+        if (!entry.id || !selectedIds.has(entry.id)) continue;
+        try {
+          const response = await authFetch('/api/entries', {
+            method: 'DELETE',
+            body: JSON.stringify({ id: entry.id }),
+          });
+          const data = await response.json();
+          if (data.status === 'ok') success++;
+        } catch (error) {
+          console.error('Error al eliminar registro en lote', error);
+        }
+      }
+      if (success === 0) {
+        alert('No se eliminaron registros.');
+      }
+      clearSelection();
+      onRefresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Edición múltiple
+  const openBulkEdit = () => setBulkEditOpen(true);
+  const closeBulkEdit = () => setBulkEditOpen(false);
+  const applyBulkEdit = async () => {
+    if (selectedIds.size === 0) return;
+    // Si no se ingresó ningún cambio, no hacemos nada
+    const hasHours = bulkEditValues.hours.trim() !== '';
+    const hasProject = bulkEditValues.projectId !== '';
+    const hasDescription = bulkEditValues.description.trim() !== '';
+    if (!hasHours && !hasProject && !hasDescription) {
+      alert('Ingresa al menos un cambio para aplicar.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let success = 0;
+      for (const entry of entries) {
+        if (!entry.id || !selectedIds.has(entry.id)) continue;
+        const nextHours = hasHours ? parseFloat(bulkEditValues.hours) : entry.hours;
+        if (!Number.isFinite(nextHours)) continue;
+        const nextDescription = hasDescription ? bulkEditValues.description : (entry.description ?? '');
+        const payload: {
+          id: number;
+          date: string;
+          hours: number;
+          description: string;
+          project_id?: number | null;
+        } = {
+          id: entry.id,
+          date: entry.date,
+          hours: nextHours,
+          description: nextDescription,
+        };
+        if (hasProject) {
+          payload.project_id = bulkEditValues.projectId === '' ? null : Number(bulkEditValues.projectId);
+        }
+        try {
+          const response = await authFetch('/api/entries', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json();
+          if (data.status === 'ok') success++;
+        } catch (error) {
+          console.error('Error al actualizar registro en lote', error);
+        }
+      }
+      if (success === 0) {
+        alert('No se actualizaron registros.');
+      }
+      closeBulkEdit();
+      clearSelection();
+      onRefresh();
     } finally {
       setLoading(false);
     }
@@ -358,7 +480,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -367,7 +489,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -437,7 +559,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
                   type="date"
                   value={newEntry.date}
                   onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -449,7 +571,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
                     setNewEntry({ ...newEntry, projectId: value });
                   }}
                   disabled={projectOptions.length === 0}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                 >
                   <option value="">Selecciona un proyecto…</option>
                   {projectOptions.map((project) => (
@@ -471,7 +593,7 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
                   max="24"
                   value={newEntry.hours}
                   onChange={(e) => setNewEntry({ ...newEntry, hours: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex items-end">
@@ -486,11 +608,46 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
             </div>
           </div>
 
+          {/* Acciones de selección múltiple */}
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
+              <span className="text-gray-900">Seleccionados: {selectedIds.size}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openBulkEdit}
+                  className="rounded-md border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-100"
+                >
+                  Editar seleccionados
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="rounded-md border border-red-300 px-3 py-1 text-red-700 hover:bg-red-50"
+                >
+                  Eliminar seleccionados
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className="rounded-md border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-100"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Tabla de entradas */}
           <div className="overflow-x-auto">
             <table className="w-full border border-gray-200 rounded-md">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="py-3 px-4">
+                    <input
+                      type="checkbox"
+                      checked={allSelectedOnPage}
+                      onChange={toggleSelectAllOnPage}
+                      aria-label="Seleccionar todos"
+                    />
+                  </th>
                   <th className="text-left py-3 px-4 font-medium text-gray-900">Fecha</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-900">Día</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-900">Proyecto</th>
@@ -501,7 +658,16 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
               <tbody>
                 {paginatedEntries.map((entry) => (
                   <tr key={entry.id || entry.date} className={`border-b ${entry.weekday >= 5 ? 'bg-blue-50' : ''}`}>
-                    <td className="py-3 px-4 font-mono text-sm">{entry.date}</td>
+                    <td className="py-3 px-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={typeof entry.id === 'number' ? selectedIds.has(entry.id) : false}
+                        onChange={() => toggleSelect(entry.id)}
+                        disabled={typeof entry.id !== 'number'}
+                        title={typeof entry.id !== 'number' ? 'No se puede seleccionar: falta ID' : 'Seleccionar'}
+                      />
+                    </td>
+                    <td className="py-3 px-4 font-mono text-sm text-gray-900">{entry.date}</td>
                     <td className="py-3 px-4">
                       <span className={`capitalize font-medium ${
                         entry.weekday >= 5 ? 'text-blue-600' : 'text-gray-900'
@@ -668,6 +834,70 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
               projectById={projectById}
               defaultProjectId={effectiveDefaultProjectId}
             />
+          )}
+
+          {/* Modal de edición múltiple */}
+          {bulkEditOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+              <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Editar registros seleccionados</h3>
+                  <button onClick={closeBulkEdit} className="text-gray-500 hover:text-gray-700" aria-label="Cerrar">
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900">Horas (opcional)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="24"
+                      placeholder="Dejar vacío para no cambiar"
+                      value={bulkEditValues.hours}
+                      onChange={(e) => setBulkEditValues((s) => ({ ...s, hours: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900">Proyecto (opcional)</label>
+                    <select
+                      value={bulkEditValues.projectId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBulkEditValues((s) => ({ ...s, projectId: val === '' ? '' : Number(val) }));
+                      }}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">No cambiar</option>
+                      {projectOptions.map((project) => (
+                        <option key={project.id} value={project.id ?? ''}>
+                          {project.name}
+                          {project.company_id && companyNameById.get(project.company_id)
+                            ? ` · ${companyNameById.get(project.company_id)}`
+                            : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900">Descripción (opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="Dejar vacío para no cambiar"
+                      value={bulkEditValues.description}
+                      onChange={(e) => setBulkEditValues((s) => ({ ...s, description: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button onClick={closeBulkEdit} className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancelar</button>
+                  <button onClick={applyBulkEdit} disabled={loading} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">Aplicar cambios</button>
+                </div>
+              </div>
+            </div>
           )}
 
     </div>

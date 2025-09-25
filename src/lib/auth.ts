@@ -1,11 +1,33 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { JWTPayload } from './types';
 
-const rawSecret = process.env.JWT_SECRET;
+type GlobalWithJwtDevSecret = typeof globalThis & {
+  __HOURS_APP_JWT_DEV_SECRET__?: string;
+};
+
+const globalWithJwtSecret = globalThis as GlobalWithJwtDevSecret;
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const isDevOrTest = nodeEnv === 'development' || nodeEnv === 'test';
+
+let rawSecret = process.env.JWT_SECRET;
 
 if (!rawSecret) {
-  throw new Error('JWT_SECRET environment variable is required for authentication.');
+  if (!isDevOrTest) {
+    throw new Error('JWT_SECRET environment variable is required for authentication.');
+  }
+
+  if (!globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__) {
+    globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__ = crypto
+      .randomBytes(32)
+      .toString('hex');
+    console.warn(
+      '[auth] JWT_SECRET no está definido. Se generó un secreto temporal para desarrollo; los tokens se invalidarán al reiniciar.'
+    );
+  }
+
+  rawSecret = globalWithJwtSecret.__HOURS_APP_JWT_DEV_SECRET__;
 }
 
 const JWT_SECRET: string = rawSecret;
