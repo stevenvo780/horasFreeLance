@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
-import { generateToken } from '@/lib/auth';
+import { AUTH_COOKIE_MAX_AGE, AUTH_COOKIE_NAME, generateToken } from '@/lib/auth';
 import { RegisterRequest, AuthResponse } from '@/lib/types';
+import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request);
+    const allowed = consumeRateLimit(`register:${clientIp}`, { limit: 5, windowMs: 60_000 });
+    if (!allowed) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Demasiados intentos. Inténtalo más tarde.'
+      } as AuthResponse, { status: 429 });
+    }
+
     const body: RegisterRequest = await request.json();
     const { email, password, name } = body;
 
@@ -49,16 +59,27 @@ export async function POST(request: NextRequest) {
       email: email
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       status: 'ok',
       message: 'Usuario registrado exitosamente',
-      token,
       user: {
         id: userId,
         email: email,
         name: name
       }
     } as AuthResponse);
+
+    response.cookies.set({
+      name: AUTH_COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: AUTH_COOKIE_MAX_AGE,
+      path: '/',
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Error during registration:', error);

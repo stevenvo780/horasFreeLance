@@ -25,20 +25,17 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
       const data: AuthResponse = await response.json();
 
-      if (data.status === 'ok' && data.token) {
-        // Store token in localStorage
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        
-        // Redirect to dashboard
+      if (response.ok && data.status === 'ok') {
         router.push('/');
+        router.refresh();
       } else {
-        setError(data.message);
+        setError(data.message || 'No se pudo iniciar sesión.');
       }
     } catch {
       setError('Error de conexión. Inténtalo de nuevo.');

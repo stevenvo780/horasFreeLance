@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { HourEntry, Settings, WeekdayAverage, User, Company, Project } from './types';
+import { HourEntry, Settings, WeekdayAverage, User, Company, Project, EntryChange } from './types';
 
 // Use Turso in production, local SQLite in development
 const client = createClient({
@@ -296,6 +296,56 @@ class Database {
     return Number(result.lastInsertRowid);
   }
 
+  async getEntryByDate(companyId: number, date: string, projectId?: number | null): Promise<HourEntry | null> {
+    let sql = 'SELECT * FROM hour_entries WHERE date = ? AND company_id = ?';
+    const args: Array<string | number | null> = [date, companyId];
+
+    if (typeof projectId === 'number') {
+      sql += ' AND project_id = ?';
+      args.push(projectId);
+    } else if (projectId === null) {
+      sql += ' AND project_id IS NULL';
+    }
+
+    const result = await this.client.execute({ sql, args });
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: Number(row.id),
+      date: String(row.date),
+      hours: Number(row.hours),
+      description: String(row.description ?? ''),
+      company_id: Number(row.company_id),
+      project_id: row.project_id != null ? Number(row.project_id) : null,
+      created_at: String(row.created_at ?? ''),
+    };
+  }
+
+  async getEntryById(id: number): Promise<HourEntry | null> {
+    const result = await this.client.execute({
+      sql: 'SELECT * FROM hour_entries WHERE id = ?',
+      args: [id]
+    });
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: Number(row.id),
+      date: String(row.date),
+      hours: Number(row.hours),
+      description: String(row.description ?? ''),
+      company_id: Number(row.company_id),
+      project_id: row.project_id != null ? Number(row.project_id) : null,
+      created_at: String(row.created_at ?? ''),
+    };
+  }
+
   async getEntries(companyId: number): Promise<HourEntry[]> {
     const result = await this.client.execute({
       sql: 'SELECT * FROM hour_entries WHERE company_id = ? ORDER BY date DESC, id DESC',
@@ -373,14 +423,15 @@ class Database {
     });
   }
 
-  async fillWithAverages(startDate: string, endDate: string, companyId: number): Promise<void> {
+  async fillWithAverages(startDate: string, endDate: string, companyId: number, overwrite = false): Promise<EntryChange[]> {
     const averages = await this.getWeekdayAverages(companyId);
-    if (averages.length === 0) return;
+    if (averages.length === 0) return [];
 
     const averageMap = new Map(averages.map(avg => [avg.weekday, avg.average_hours]));
     
     const start = new Date(startDate);
     const end = new Date(endDate);
+    const changes: EntryChange[] = [];
     
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
       const weekday = date.getDay();
@@ -397,9 +448,24 @@ class Database {
         
         if (existingResult.rows.length === 0) {
           await this.addEntry(dateString, averageHours, 'Filled with average', companyId);
+          changes.push({
+            date: dateString,
+            old_value: 0,
+            new_value: averageHours,
+          });
+        }
+        else if (overwrite) {
+          const existing = existingResult.rows[0];
+          await this.updateEntry(Number(existing.id), dateString, averageHours, 'Filled with average');
+          changes.push({
+            date: dateString,
+            old_value: Number(existing.hours),
+            new_value: averageHours,
+          });
         }
       }
     }
+    return changes;
   }
 
   // Legacy settings methods (kept for compatibility)
@@ -410,6 +476,13 @@ class Database {
 
   async updateSettings(): Promise<void> {
     // No-op since we now use company-based rates
+  }
+
+  async updateCompanyRate(companyId: number, hourlyRate: number): Promise<void> {
+    await this.client.execute({
+      sql: 'UPDATE companies SET hourly_rate = ? WHERE id = ?',
+      args: [hourlyRate, companyId]
+    });
   }
 }
 

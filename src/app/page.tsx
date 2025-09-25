@@ -27,7 +27,7 @@ interface AppData {
 }
 
 export default function Dashboard() {
-  const { user, logout, getAuthHeaders, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, logout, authFetch, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,9 +113,7 @@ export default function Dashboard() {
         ? `/api/status?company_id=${effectiveCompanyId}`
         : '/api/status';
 
-      const response = await fetch(url, {
-        headers: getAuthHeaders()
-      });
+      const response = await authFetch(url);
 
       if (response.status === 401) {
         logout();
@@ -169,7 +167,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders, isAuthenticated, logout, selectedCompanyId, selectedProjectId]);
+  }, [authFetch, isAuthenticated, logout, selectedCompanyId, selectedProjectId]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -181,9 +179,8 @@ export default function Dashboard() {
     if (!newCompanyName) return;
     
     try {
-      const response = await fetch('/api/companies', {
+      const response = await authFetch('/api/companies', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ 
           name: newCompanyName,
           hourly_rate: newCompanyRate ? parseFloat(newCompanyRate) : undefined
@@ -213,9 +210,8 @@ export default function Dashboard() {
     }
 
     try {
-      const response = await fetch('/api/projects', {
+      const response = await authFetch('/api/projects', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({
           name: newProjectName.trim(),
           company_id: targetCompanyId
@@ -253,12 +249,8 @@ export default function Dashboard() {
       
       for (const entry of entries) {
         try {
-          const response = await fetch('/api/entries', {
+          const response = await authFetch('/api/entries', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...getAuthHeaders()
-            },
             body: JSON.stringify({
               date: entry.date,
               hours: entry.hours,

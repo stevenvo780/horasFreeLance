@@ -1,19 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, initializeDatabase } from '@/lib/turso-db';
+import { getDatabase } from '@/lib/db';
+import { getUserIdFromRequest } from '@/lib/auth';
 import { ApiResponse, FillAverageRequest } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   try {
-    await initializeDatabase();
-    const db = getDatabase();
-    
-    const body: FillAverageRequest = await request.json();
-    const { start_date, end_date, overwrite = false } = body;
-
-    if (!start_date || !end_date) {
+    const userId = getUserIdFromRequest(request);
+    if (!userId) {
       return NextResponse.json({
         status: 'error',
-        message: 'Faltan campos requeridos: start_date, end_date'
+        message: 'No autorizado'
+      } as ApiResponse, { status: 401 });
+    }
+
+    const db = getDatabase();
+    await db.init();
+
+    const body: FillAverageRequest & { company_id?: number } = await request.json();
+    const { start_date, end_date, overwrite = false, company_id } = body;
+
+    if (!start_date || !end_date || !company_id) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Faltan campos requeridos: start_date, end_date, company_id'
       } as ApiResponse, { status: 400 });
     }
 
@@ -32,7 +41,15 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
-    const changes = await db.fillWithAverages(start_date, end_date, overwrite);
+    const company = await db.getCompanyById(company_id);
+    if (!company || company.user_id !== userId) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Empresa no encontrada o sin permisos'
+      } as ApiResponse, { status: 404 });
+    }
+
+    const changes = await db.fillWithAverages(start_date, end_date, company_id, overwrite);
 
     const response: ApiResponse = {
       status: 'ok',

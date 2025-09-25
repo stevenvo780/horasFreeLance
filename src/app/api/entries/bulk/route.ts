@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, initializeDatabase } from '@/lib/turso-db';
+import { getDatabase } from '@/lib/db';
+import { getUserIdFromRequest } from '@/lib/auth';
 import { ApiResponse, BulkAddRequest, WEEKDAY_ALIASES } from '@/lib/types';
 
 function parseWeekdays(weekdayStrings: string[]): number[] {
@@ -19,15 +20,12 @@ function parseWeekdays(weekdayStrings: string[]): number[] {
   return [...new Set(weekdays)]; // Remove duplicates
 }
 
-function bulkAddEntries(
+function buildDateRange(
   startDate: string,
   endDate: string,
-  hours: number,
   weekdays?: number[],
-  skipExisting = false,
-  mode: 'set' | 'accumulate' | 'error' = 'set'
 ) {
-  const entries: Array<{ date: string; hours: number; mode: typeof mode }> = [];
+  const entries: string[] = [];
   const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
   
@@ -36,7 +34,7 @@ function bulkAddEntries(
     
     if (!weekdays || weekdays.includes(weekday)) {
       const dateStr = current.toISOString().split('T')[0];
-      entries.push({ date: dateStr, hours, mode: skipExisting ? 'error' : mode });
+      entries.push(dateStr);
     }
   }
   
@@ -45,23 +43,40 @@ function bulkAddEntries(
 
 export async function POST(request: NextRequest) {
   try {
-    await initializeDatabase();
-    const db = getDatabase();
-    
-    const body: BulkAddRequest = await request.json();
-    const { start_date, end_date, hours, weekdays: weekdayStrings, mode = 'set', skip_existing = false } = body;
-
-    if (!start_date || !end_date || typeof hours !== 'number') {
+    const userId = getUserIdFromRequest(request);
+    if (!userId) {
       return NextResponse.json({
         status: 'error',
-        message: 'Faltan campos requeridos: start_date, end_date, hours'
+        message: 'No autorizado'
+      } as ApiResponse, { status: 401 });
+    }
+
+    const db = getDatabase();
+    await db.init();
+
+    const body: BulkAddRequest = await request.json();
+    const {
+      start_date,
+      end_date,
+      hours,
+      weekdays: weekdayStrings,
+      mode = 'set',
+      skip_existing = false,
+      company_id,
+      project_id = null,
+    } = body;
+
+    if (!start_date || !end_date || typeof hours !== 'number' || !company_id) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Faltan campos requeridos: start_date, end_date, hours, company_id'
       } as ApiResponse, { status: 400 });
     }
 
-    if (hours < 0) {
+    if (hours < 0 || hours > 24) {
       return NextResponse.json({
         status: 'error',
-        message: 'Las horas deben ser positivas'
+        message: 'Las horas deben ser un número entre 0 y 24'
       } as ApiResponse, { status: 400 });
     }
 
@@ -88,6 +103,29 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
+    const company = await db.getCompanyById(company_id);
+    if (!company || company.user_id !== userId) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Empresa no encontrada o sin permisos'
+      } as ApiResponse, { status: 404 });
+    }
+
+    const hasProjectId = Object.prototype.hasOwnProperty.call(body, 'project_id');
+    let projectIdToUse: number | null = null;
+    if (hasProjectId && project_id != null) {
+      const project = await db.getProjectById(project_id);
+      if (!project || project.user_id !== userId || project.company_id !== company_id) {
+        return NextResponse.json({
+          status: 'error',
+          message: 'Proyecto no encontrado o sin permisos'
+        } as ApiResponse, { status: 404 });
+      }
+      projectIdToUse = project.id ?? null;
+    } else if (hasProjectId && project_id == null) {
+      projectIdToUse = null;
+    }
+
     // Parse weekdays if provided
     let weekdays: number[] | undefined;
     if (weekdayStrings && weekdayStrings.length > 0) {
@@ -102,9 +140,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate entries for the date range
-    const entriesToAdd = bulkAddEntries(start_date, end_date, hours, weekdays, skip_existing, mode);
+    const dates = buildDateRange(start_date, end_date, weekdays);
     
-    if (entriesToAdd.length === 0) {
+    if (dates.length === 0) {
       return NextResponse.json({
         status: 'ok',
         message: 'No se encontraron días que coincidan con los criterios',
@@ -113,20 +151,47 @@ export async function POST(request: NextRequest) {
     }
 
     // Process each entry
-    const changes = [];
-    const errors = [];
+  const changes: NonNullable<ApiResponse['changes']> = [];
+    const errors: string[] = [];
 
-    for (const entry of entriesToAdd) {
+    for (const date of dates) {
       try {
-        // Convertir el mode de bulk a mode de addEntry
-        const addMode = entry.mode === 'accumulate' ? 'add' : 'replace';
-        const change = await db.addEntry(entry.date, entry.hours, addMode);
-        changes.push(change);
-      } catch (error) {
-        if (skip_existing && error instanceof Error && error.message.includes('Ya existe')) {
-          continue; // Skip existing entries when skip_existing is true
+        const existingEntry = await db.getEntryByDate(company_id, date, projectIdToUse ?? null);
+
+        if (existingEntry) {
+          if (skip_existing) {
+            continue;
+          }
+
+          if (mode === 'error') {
+            errors.push(`${date}: Ya existe una entrada`);
+            continue;
+          }
+
+          const newHours = mode === 'accumulate' ? existingEntry.hours + hours : hours;
+          if (newHours < 0 || newHours > 24) {
+            errors.push(`${date}: Las horas resultantes deben estar entre 0 y 24`);
+            continue;
+          }
+
+          const nextDescription = existingEntry.description || 'Carga masiva';
+          await db.updateEntry(existingEntry.id!, date, newHours, nextDescription, projectIdToUse ?? existingEntry.project_id ?? null);
+          changes.push({
+            date,
+            old_value: existingEntry.hours,
+            new_value: newHours,
+          });
+          continue;
         }
-        errors.push(`${entry.date}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+
+        await db.addEntry(date, hours, 'Carga masiva', company_id, projectIdToUse ?? null);
+        changes.push({
+          date,
+          old_value: 0,
+          new_value: hours,
+        });
+      } catch (error) {
+        errors.push(`${date}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
       }
     }
 

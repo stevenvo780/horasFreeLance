@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, initializeDatabase } from '@/lib/db';
+import { getDatabase } from '@/lib/db';
 import { getUserIdFromRequest } from '@/lib/auth';
 import { ApiResponse } from '@/lib/types';
 
@@ -13,11 +13,11 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 401 });
     }
 
-    await initializeDatabase();
     const db = getDatabase();
-    
-  const body = await request.json();
-  const { date, hours, mode = 'set', company_id, project_id = null, description = '' } = body;
+    await db.init();
+
+    const body = await request.json();
+    const { date, hours, mode = 'set', company_id, project_id = null, description = '' } = body;
 
     if (!date || typeof hours !== 'number' || !company_id) {
       return NextResponse.json({
@@ -26,10 +26,10 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
-    if (hours < 0) {
+    if (hours < 0 || hours > 24) {
       return NextResponse.json({
         status: 'error',
-        message: 'Las horas deben ser positivas'
+        message: 'Las horas deben ser un número entre 0 y 24'
       } as ApiResponse, { status: 400 });
     }
 
@@ -58,8 +58,10 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 404 });
     }
 
+    const hasProjectId = Object.prototype.hasOwnProperty.call(body, 'project_id');
     let projectIdToUse: number | null = null;
-    if (project_id != null) {
+
+    if (hasProjectId && project_id != null) {
       const project = await db.getProjectById(project_id);
       if (!project || project.user_id !== userId || project.company_id !== company_id) {
         return NextResponse.json({
@@ -68,11 +70,46 @@ export async function POST(request: NextRequest) {
         } as ApiResponse, { status: 404 });
       }
       projectIdToUse = project.id ?? null;
+    } else if (hasProjectId && project_id == null) {
+      projectIdToUse = null;
     }
 
-    await db.addEntry(date, hours, description, company_id, projectIdToUse);
+    const normalizedDescription = description?.toString() ?? '';
+    const existingEntry = await db.getEntryByDate(company_id, date, projectIdToUse ?? null);
 
-    const response: ApiResponse = {
+    if (existingEntry) {
+      if (mode === 'error') {
+        return NextResponse.json({
+          status: 'error',
+          message: 'Ya existe una entrada para ese día'
+        } as ApiResponse, { status: 409 });
+      }
+
+      const newHours = mode === 'accumulate' ? existingEntry.hours + hours : hours;
+      if (newHours < 0 || newHours > 24) {
+        return NextResponse.json({
+          status: 'error',
+          message: 'Las horas resultantes deben estar entre 0 y 24'
+        } as ApiResponse, { status: 400 });
+      }
+
+      const nextDescription = normalizedDescription || existingEntry.description || '';
+      await db.updateEntry(existingEntry.id!, date, newHours, nextDescription, projectIdToUse ?? existingEntry.project_id ?? null);
+
+      return NextResponse.json({
+        status: 'ok',
+        message: `Entrada actualizada para ${date}`,
+        changes: [{
+          date,
+          old_value: existingEntry.hours,
+          new_value: newHours
+        }]
+      } as ApiResponse);
+    }
+
+    await db.addEntry(date, hours, normalizedDescription, company_id, projectIdToUse ?? null);
+
+    return NextResponse.json({
       status: 'ok',
       message: `Entrada creada para ${date}`,
       changes: [{
@@ -80,9 +117,7 @@ export async function POST(request: NextRequest) {
         old_value: 0,
         new_value: hours
       }]
-    };
-
-    return NextResponse.json(response);
+    } as ApiResponse);
   } catch (error) {
     const response: ApiResponse = {
       status: 'error',
@@ -103,13 +138,13 @@ export async function PUT(request: NextRequest) {
       } as ApiResponse, { status: 401 });
     }
 
-    await initializeDatabase();
-    const db = getDatabase();
-    
-    const body = await request.json();
-    const { id, date, hours, description = '' } = body;
-    const hasProjectId = Object.prototype.hasOwnProperty.call(body, 'project_id');
-    const projectId = hasProjectId ? body.project_id : undefined;
+  const db = getDatabase();
+  await db.init();
+
+  const body = await request.json();
+  const { id, date, hours, description = '' } = body;
+  const hasProjectId = Object.prototype.hasOwnProperty.call(body, 'project_id');
+  const projectId = hasProjectId ? body.project_id : undefined;
 
     if (!id || !date || hours === undefined) {
       return NextResponse.json({
@@ -135,31 +170,23 @@ export async function PUT(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
-    // Verify entry exists and user has permission by getting all companies and their entries
-    const companies = await db.getUserCompanies(userId);
-    let targetEntry = null;
-    let targetCompany = null;
-    
-    for (const company of companies) {
-      if (company.id) {
-        const entries = await db.getEntries(company.id);
-        const entry = entries.find(e => e.id === id);
-        if (entry) {
-          targetEntry = entry;
-          targetCompany = company;
-          break;
-        }
-      }
-    }
-    
-    if (!targetEntry || !targetCompany) {
+    const targetEntry = await db.getEntryById(id);
+    if (!targetEntry) {
       return NextResponse.json({
         status: 'error',
         message: 'Entrada no encontrada o sin permisos'
       } as ApiResponse, { status: 404 });
     }
 
-    let projectIdToUse: number | null | undefined = projectId;
+    const targetCompany = await db.getCompanyById(targetEntry.company_id);
+    if (!targetCompany || targetCompany.user_id !== userId) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Entrada no encontrada o sin permisos'
+      } as ApiResponse, { status: 404 });
+    }
+
+    let projectIdToUse: number | null | undefined = undefined;
     if (hasProjectId) {
       if (projectId != null) {
         const project = await db.getProjectById(projectId);
@@ -175,7 +202,8 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    await db.updateEntry(id, date, hours, description, projectIdToUse);
+    const nextDescription = description?.toString() ?? targetEntry.description ?? '';
+    await db.updateEntry(id, date, hours, nextDescription, projectIdToUse);
 
     const response: ApiResponse = {
       status: 'ok',
@@ -208,11 +236,11 @@ export async function DELETE(request: NextRequest) {
       } as ApiResponse, { status: 401 });
     }
 
-    await initializeDatabase();
-    const db = getDatabase();
-    
-    const body = await request.json();
-    const { id } = body;
+  const db = getDatabase();
+  await db.init();
+
+  const body = await request.json();
+  const { id } = body;
 
     if (!id) {
       return NextResponse.json({
@@ -221,24 +249,16 @@ export async function DELETE(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
-    // Verify entry exists and user has permission by getting all companies and their entries
-    const companies = await db.getUserCompanies(userId);
-    let targetEntry = null;
-    let targetCompany = null;
-    
-    for (const company of companies) {
-      if (company.id) {
-        const entries = await db.getEntries(company.id);
-        const entry = entries.find(e => e.id === id);
-        if (entry) {
-          targetEntry = entry;
-          targetCompany = company;
-          break;
-        }
-      }
+    const targetEntry = await db.getEntryById(id);
+    if (!targetEntry) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Entrada no encontrada o sin permisos'
+      } as ApiResponse, { status: 404 });
     }
-    
-    if (!targetEntry || !targetCompany) {
+
+    const targetCompany = await db.getCompanyById(targetEntry.company_id);
+    if (!targetCompany || targetCompany.user_id !== userId) {
       return NextResponse.json({
         status: 'error',
         message: 'Entrada no encontrada o sin permisos'

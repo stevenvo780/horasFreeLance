@@ -1,26 +1,27 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { AUTH_COOKIE_NAME, extractTokenFromHeader, verifyToken } from '@/lib/auth';
+
+const PUBLIC_ROUTES = ['/login', '/register'];
+const PUBLIC_API_ROUTES = ['/api/auth/login', '/api/auth/register', '/api/auth/logout', '/api/auth/session'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/register'];
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  const isPublicRoute = PUBLIC_ROUTES.some(route => pathname.startsWith(route));
+  const isPublicApiRoute = PUBLIC_API_ROUTES.some(route => pathname.startsWith(route));
 
-  // API routes that don't require authentication
-  const publicApiRoutes = ['/api/auth/login', '/api/auth/register'];
-  const isPublicApiRoute = publicApiRoutes.some(route => pathname.startsWith(route));
-
-  // If it's a public route, allow access
   if (isPublicRoute || isPublicApiRoute) {
     return NextResponse.next();
   }
 
-  // For API routes, check for Bearer token
+  const cookieToken = request.cookies.get(AUTH_COOKIE_NAME)?.value ?? null;
+  const headerToken = extractTokenFromHeader(request.headers.get('authorization') || undefined);
+  const token = cookieToken || headerToken || null;
+  const payload = token ? verifyToken(token) : null;
+
   if (pathname.startsWith('/api/')) {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!payload) {
       return NextResponse.json(
         { status: 'error', message: 'No autorizado' },
         { status: 401 }
@@ -29,8 +30,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For protected pages, redirect to login if no token in headers
-  // Note: We can't check localStorage in middleware, so we'll handle this client-side
+  if (!payload) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
   return NextResponse.next();
 }
 

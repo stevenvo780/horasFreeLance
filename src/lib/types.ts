@@ -67,6 +67,7 @@ export interface FillAverageRequest {
   start_date: string;
   end_date: string;
   overwrite?: boolean;
+  company_id: number;
 }
 
 export interface ApiResponse<T = unknown> {

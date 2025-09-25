@@ -53,7 +53,7 @@ const getSunday = (value: Date) => {
 
 export default function BulkHoursTable({ onSave, onRefresh, existingEntries, companies, defaultCompanyId, projects, defaultProjectId }: BulkHoursTableProps) {
   // Hook de autenticación
-  const { getAuthHeaders } = useAuth();
+  const { authFetch } = useAuth();
   
   // Filtros y paginación
   const [startDate, setStartDate] = useState('');
@@ -210,9 +210,8 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
     setLoading(true);
     try {
       // Usar el endpoint PUT para actualizar la entrada existente
-      const response = await fetch('/api/entries', {
+      const response = await authFetch('/api/entries', {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify({
           id: editingEntry.id,
           date: editingEntry.date,
@@ -245,9 +244,8 @@ export default function BulkHoursTable({ onSave, onRefresh, existingEntries, com
     setLoading(true);
     try {
       // Usar el endpoint DELETE para eliminar la entrada
-      const response = await fetch('/api/entries', {
+      const response = await authFetch('/api/entries', {
         method: 'DELETE',
-        headers: getAuthHeaders(),
         body: JSON.stringify({
           id: entry.id
         }),

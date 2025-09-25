@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
-import { generateToken, verifyPassword } from '@/lib/auth';
+import { AUTH_COOKIE_MAX_AGE, AUTH_COOKIE_NAME, generateToken, verifyPassword } from '@/lib/auth';
 import { LoginRequest, AuthResponse } from '@/lib/types';
+import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request);
+    const allowed = consumeRateLimit(`login:${clientIp}`, { limit: 10, windowMs: 60_000 });
+    if (!allowed) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Demasiados intentos. Inténtalo más tarde.'
+      } as AuthResponse, { status: 429 });
+    }
+
     const body: LoginRequest = await request.json();
     const { email, password } = body;
 
@@ -43,10 +53,9 @@ export async function POST(request: NextRequest) {
       email: user.email
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       status: 'ok',
       message: 'Login exitoso',
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -54,6 +63,18 @@ export async function POST(request: NextRequest) {
         created_at: user.created_at
       }
     } as AuthResponse);
+
+    response.cookies.set({
+      name: AUTH_COOKIE_NAME,
+      value: token,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: AUTH_COOKIE_MAX_AGE,
+      path: '/',
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Error during login:', error);
