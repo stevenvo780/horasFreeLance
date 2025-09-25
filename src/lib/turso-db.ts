@@ -120,6 +120,9 @@ class TursoDatabase {
       id: Number(row.id),
       date: String(row.date),
       hours: Number(row.hours),
+      description: row.description != null ? String(row.description) : '',
+      company_id: Number(row.company_id ?? 0),
+      project_id: row.project_id != null ? Number(row.project_id) : null,
       created_at: String(row.created_at),
       updated_at: String(row.updated_at)
     }));
@@ -173,9 +176,8 @@ class TursoDatabase {
 
     return result.rows.map(row => ({
       weekday: Number(row.weekday),
-      average: Number(row.average),
-      total_hours: Number(row.total_hours),
-      entry_count: Number(row.entry_count)
+      average_hours: Number(row.average),
+      company_id: 0
     }));
   }
 
