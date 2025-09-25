@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { AUTH_COOKIE_NAME } from '@/lib/auth';
+import { AUTH_COOKIE_NAME, AUTH_COOKIE_SAME_SITE, AUTH_COOKIE_SECURE } from '@/lib/auth';
 import { AuthResponse } from '@/lib/types';
 
 export async function POST() {
@@ -12,8 +12,8 @@ export async function POST() {
     name: AUTH_COOKIE_NAME,
     value: '',
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: AUTH_COOKIE_SAME_SITE,
+    secure: AUTH_COOKIE_SECURE,
     maxAge: 0,
     path: '/',
   });

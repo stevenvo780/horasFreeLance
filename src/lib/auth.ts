@@ -11,8 +11,12 @@ if (!rawSecret) {
 const JWT_SECRET: string = rawSecret;
 
 const JWT_EXPIRES_IN = '7d';
-export const AUTH_COOKIE_NAME = 'token';
+const allowInsecureCookie = process.env.ALLOW_INSECURE_AUTH_COOKIE === 'true';
+
+export const AUTH_COOKIE_NAME = allowInsecureCookie ? 'hours-token' : '__Host-hours-token';
 export const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+export const AUTH_COOKIE_SAME_SITE = 'strict' as const;
+export const AUTH_COOKIE_SECURE = !allowInsecureCookie;
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);

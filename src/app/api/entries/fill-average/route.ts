@@ -3,6 +3,8 @@ import { getDatabase } from '@/lib/db';
 import { getUserIdFromRequest } from '@/lib/auth';
 import { ApiResponse, FillAverageRequest } from '@/lib/types';
 
+const MAX_FILL_RANGE_DAYS = 31;
+
 export async function POST(request: NextRequest) {
   try {
     const userId = getUserIdFromRequest(request);
@@ -41,6 +43,23 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
+    const start = new Date(start_date + 'T00:00:00Z');
+    const end = new Date(end_date + 'T00:00:00Z');
+    const rangeDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    if (!Number.isFinite(rangeDays) || rangeDays <= 0) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Rango de fechas inválido'
+      } as ApiResponse, { status: 400 });
+    }
+
+    if (rangeDays > MAX_FILL_RANGE_DAYS) {
+      return NextResponse.json({
+        status: 'error',
+        message: `El rango de fechas no puede exceder ${MAX_FILL_RANGE_DAYS} días`
+      } as ApiResponse, { status: 400 });
+    }
+
     const company = await db.getCompanyById(company_id);
     if (!company || company.user_id !== userId) {
       return NextResponse.json({
@@ -59,11 +78,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    console.error('Error filling averages:', error);
     const response: ApiResponse = {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Error desconocido'
+      message: 'Error interno del servidor'
     };
-    
+
     return NextResponse.json(response, { status: 500 });
   }
 }

@@ -119,11 +119,12 @@ export async function POST(request: NextRequest) {
       }]
     } as ApiResponse);
   } catch (error) {
+    console.error('Error creating entry:', error);
     const response: ApiResponse = {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Error desconocido'
+      message: 'Error interno del servidor'
     };
-    
+
     return NextResponse.json(response, { status: 500 });
   }
 }
@@ -217,11 +218,12 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    console.error('Error updating entry:', error);
     const response: ApiResponse = {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Error desconocido'
+      message: 'Error interno del servidor'
     };
-    
+
     return NextResponse.json(response, { status: 500 });
   }
 }
@@ -279,11 +281,12 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    console.error('Error deleting entry:', error);
     const response: ApiResponse = {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Error desconocido'
+      message: 'Error interno del servidor'
     };
-    
+
     return NextResponse.json(response, { status: 500 });
   }
 }

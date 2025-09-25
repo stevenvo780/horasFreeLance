@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
-import { AUTH_COOKIE_MAX_AGE, AUTH_COOKIE_NAME, generateToken, verifyPassword } from '@/lib/auth';
+import { AUTH_COOKIE_MAX_AGE, AUTH_COOKIE_NAME, AUTH_COOKIE_SAME_SITE, AUTH_COOKIE_SECURE, generateToken, verifyPassword } from '@/lib/auth';
 import { LoginRequest, AuthResponse } from '@/lib/types';
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 
@@ -68,8 +68,8 @@ export async function POST(request: NextRequest) {
       name: AUTH_COOKIE_NAME,
       value: token,
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: AUTH_COOKIE_SAME_SITE,
+      secure: AUTH_COOKIE_SECURE,
       maxAge: AUTH_COOKIE_MAX_AGE,
       path: '/',
     });

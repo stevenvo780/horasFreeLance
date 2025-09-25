@@ -63,11 +63,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    console.error('Error fetching status data:', error);
     const response: ApiResponse = {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Error desconocido'
+      message: 'Error interno del servidor'
     };
-    
+
     return NextResponse.json(response, { status: 500 });
   }
 }

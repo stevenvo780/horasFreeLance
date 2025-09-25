@@ -3,6 +3,8 @@ import { getDatabase } from '@/lib/db';
 import { getUserIdFromRequest } from '@/lib/auth';
 import { ApiResponse, BulkAddRequest, WEEKDAY_ALIASES } from '@/lib/types';
 
+const MAX_BULK_RANGE_DAYS = 31;
+
 function parseWeekdays(weekdayStrings: string[]): number[] {
   const weekdays: number[] = [];
   
@@ -95,6 +97,23 @@ export async function POST(request: NextRequest) {
       } as ApiResponse, { status: 400 });
     }
 
+    const start = new Date(start_date + 'T00:00:00Z');
+    const end = new Date(end_date + 'T00:00:00Z');
+    const rangeDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    if (!Number.isFinite(rangeDays) || rangeDays <= 0) {
+      return NextResponse.json({
+        status: 'error',
+        message: 'Rango de fechas inválido'
+      } as ApiResponse, { status: 400 });
+    }
+
+    if (rangeDays > MAX_BULK_RANGE_DAYS) {
+      return NextResponse.json({
+        status: 'error',
+        message: `El rango de fechas no puede exceder ${MAX_BULK_RANGE_DAYS} días`
+      } as ApiResponse, { status: 400 });
+    }
+
     // Validate mode
     if (!['set', 'accumulate', 'error'].includes(mode)) {
       return NextResponse.json({
@@ -152,7 +171,7 @@ export async function POST(request: NextRequest) {
 
     // Process each entry
   const changes: NonNullable<ApiResponse['changes']> = [];
-    const errors: string[] = [];
+  const errors: string[] = [];
 
     for (const date of dates) {
       try {
@@ -191,7 +210,8 @@ export async function POST(request: NextRequest) {
           new_value: hours,
         });
       } catch (error) {
-        errors.push(`${date}: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        console.error(`Error processing bulk entry for ${date}:`, error);
+        errors.push(`${date}: Error interno del servidor`);
       }
     }
 
@@ -210,11 +230,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
+    console.error('Error processing bulk entries:', error);
     const response: ApiResponse = {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Error desconocido'
+      message: 'Error interno del servidor'
     };
-    
+
     return NextResponse.json(response, { status: 500 });
   }
 }
