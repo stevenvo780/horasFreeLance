@@ -26,6 +26,14 @@ interface AppData {
   entry_count: number;
 }
 
+type ProjectHoursMetric = {
+  projectId: number | null;
+  name: string;
+  hours: number;
+  entries: number;
+  percentage: number;
+};
+
 export default function Dashboard() {
   const { user, logout, authFetch, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -101,6 +109,76 @@ export default function Dashboard() {
     if (!filteredEntries.length) return [];
     return getProductivityByWeekday(filteredEntries);
   }, [filteredEntries]);
+
+  const hasCustomDateRange = dashboardStartDate !== '' || dashboardEndDate !== '';
+
+  const { items: projectHoursMetrics, totalHours: projectHoursTotal } = useMemo(() => {
+    const summary: { items: ProjectHoursMetric[]; totalHours: number } = {
+      items: [],
+      totalHours: 0,
+    };
+
+    if (!filteredEntries.length) {
+      return summary;
+    }
+
+    let effectiveEntries = filteredEntries;
+
+    if (!hasCustomDateRange) {
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      const cutoff = new Date(today);
+      cutoff.setMonth(cutoff.getMonth() - 1);
+      cutoff.setHours(0, 0, 0, 0);
+
+      effectiveEntries = filteredEntries.filter(entry => {
+        const entryDate = new Date(`${entry.date}T00:00:00`);
+        return entryDate >= cutoff && entryDate <= today;
+      });
+    }
+
+    if (!effectiveEntries.length) {
+      return summary;
+    }
+
+    const projectLookup = new Map(projects.map(project => [project.id, project]));
+    const totals = new Map<string, Omit<ProjectHoursMetric, 'percentage'>>();
+
+    for (const entry of effectiveEntries) {
+      const key = entry.project_id != null ? entry.project_id.toString() : 'none';
+      let bucket = totals.get(key);
+
+      if (!bucket) {
+        const projectName = entry.project_id != null
+          ? projectLookup.get(entry.project_id)?.name ?? `Proyecto #${entry.project_id}`
+          : 'Sin proyecto';
+
+        bucket = {
+          projectId: entry.project_id ?? null,
+          name: projectName,
+          hours: 0,
+          entries: 0,
+        };
+      }
+
+      bucket.hours += entry.hours;
+      bucket.entries += 1;
+      totals.set(key, bucket);
+    }
+
+    const totalHours = effectiveEntries.reduce((sum, entry) => sum + entry.hours, 0);
+
+    const items: ProjectHoursMetric[] = Array.from(totals.values())
+      .map(item => ({
+        ...item,
+        percentage: totalHours > 0 ? (item.hours / totalHours) * 100 : 0,
+      }))
+      .sort((a, b) => b.hours - a.hours);
+
+    return { items, totalHours };
+  }, [filteredEntries, hasCustomDateRange, projects]);
+
+  const projectHoursPeriodLabel = hasCustomDateRange ? 'Periodo filtrado' : 'Últimos 30 días';
 
   const fetchData = useCallback(async (companyIdOverride?: number | null) => {
     try {
@@ -505,6 +583,67 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Horas por Proyecto */}
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <div>
+                  <div className="flex items-center">
+                    <BarChart3 className="h-5 w-5 text-indigo-500" />
+                    <h3 className="ml-2 text-lg font-semibold text-gray-900">Horas por proyecto</h3>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">{projectHoursPeriodLabel}</p>
+                </div>
+                <div className="text-sm text-gray-700">
+                  Total periodo:{' '}
+                  <span className="font-semibold text-gray-900">{formatHours(projectHoursTotal)}</span>
+                </div>
+              </div>
+
+              {projectHoursMetrics.length > 0 ? (
+                <div className="space-y-4">
+                  {projectHoursMetrics.map(metric => {
+                    const isSelected = selectedProjectId != null && metric.projectId === selectedProjectId;
+                    const widthPercentage = Math.min(100, metric.percentage > 0 ? Math.max(metric.percentage, 4) : 0);
+
+                    return (
+                      <div
+                        key={`project-metric-${metric.projectId ?? 'none'}`}
+                        className={`p-4 rounded-lg border transition-colors ${
+                          isSelected ? 'border-blue-500 bg-blue-50/80' : 'border-gray-200 bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{metric.name}</p>
+                            <p className="text-xs text-gray-600">
+                              {metric.entries} {metric.entries === 1 ? 'registro' : 'registros'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-gray-900">{formatHours(metric.hours)}</p>
+                            <p className="text-xs text-gray-600">{metric.percentage.toFixed(1)}%</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 h-2 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className={`h-2 rounded-full ${isSelected ? 'bg-blue-500' : 'bg-indigo-400'}`}
+                            style={{ width: `${widthPercentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center text-gray-600 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-6">
+                  <AlertCircle className="h-5 w-5 text-gray-500 mr-3" />
+                  <span>
+                    No hay horas registradas {hasCustomDateRange ? 'para el periodo seleccionado' : 'en los últimos 30 días'}.
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Análisis de Tendencias */}
