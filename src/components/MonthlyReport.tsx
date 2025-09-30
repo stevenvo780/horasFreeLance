@@ -126,7 +126,7 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
     yPosition += 15;
 
     // Proyectos
-    reportData.projects.forEach((project, index) => {
+    reportData.projects.forEach((project) => {
       // Verificar si necesitamos nueva página
       if (yPosition > 250) {
         doc.addPage();
@@ -135,11 +135,7 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
-      doc.text(`# de horas proyecto ${index + 1}: ${project.hours.toFixed(2)}h`, 20, yPosition);
-      yPosition += 8;
-
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Proyecto: ${project.project_name}`, 20, yPosition);
+      doc.text(`Horas de proyecto: ${project.project_name} - ${project.hours.toFixed(2)}h`, 20, yPosition);
       yPosition += 8;
 
       // Descripciones de horas a facturar
@@ -284,8 +280,7 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
 
             {reportData.projects.map((project, index) => (
               <div key={project.project_id || `unassigned-${index}`} className="mb-6 p-3 bg-white rounded border">
-                <p><strong># de horas proyecto {index + 1}:</strong> {project.hours.toFixed(2)}h</p>
-                <p><strong>Proyecto:</strong> {project.project_name}</p>
+                <p><strong>Horas de proyecto:</strong> {project.project_name} - {project.hours.toFixed(2)}h</p>
                 <p><strong>Descripción horas a facturar:</strong></p>
                 <div className="ml-4 mb-2">
                   {project.descriptions.length > 0 ? (
