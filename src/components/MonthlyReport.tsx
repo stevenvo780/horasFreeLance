@@ -138,11 +138,11 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
       doc.text(`Horas de proyecto: ${project.project_name} - ${project.hours.toFixed(2)}h`, 20, yPosition);
       yPosition += 8;
 
-      // Descripciones de horas a facturar
-      doc.text('Descripción horas a facturar:', 20, yPosition);
-      yPosition += 6;
-
+      // Descripciones de horas a facturar (solo si existen)
       if (project.descriptions.length > 0) {
+        doc.text('Descripción horas a facturar:', 20, yPosition);
+        yPosition += 6;
+        
         project.descriptions.forEach(description => {
           if (yPosition > 260) {
             doc.addPage();
@@ -153,9 +153,6 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
           doc.text(lines, 25, yPosition);
           yPosition += lines.length * 5;
         });
-      } else {
-        doc.text('• Sin descripción específica', 25, yPosition);
-        yPosition += 6;
       }
 
       yPosition += 5;
@@ -281,16 +278,16 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
             {reportData.projects.map((project, index) => (
               <div key={project.project_id || `unassigned-${index}`} className="mb-6 p-3 bg-white rounded border">
                 <p><strong>Horas de proyecto:</strong> {project.project_name} - {project.hours.toFixed(2)}h</p>
-                <p><strong>Descripción horas a facturar:</strong></p>
-                <div className="ml-4 mb-2">
-                  {project.descriptions.length > 0 ? (
-                    project.descriptions.map((desc, i) => (
-                      <p key={i} className="text-sm">• {desc}</p>
-                    ))
-                  ) : (
-                    <p className="text-sm">• Sin descripción específica</p>
-                  )}
-                </div>
+                {project.descriptions.length > 0 && (
+                  <>
+                    <p><strong>Descripción horas a facturar:</strong></p>
+                    <div className="ml-4 mb-2">
+                      {project.descriptions.map((desc, i) => (
+                        <p key={i} className="text-sm">• {desc}</p>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <p><strong>Estado aprobación producer ILS:</strong> _______________</p>
               </div>
             ))}
