@@ -16,6 +16,7 @@ import {
 } from '@/lib/analytics';
 import { useAuth } from '@/hooks/useAuth';
 import BulkHoursTable from '@/components/BulkHoursTable';
+import MonthlyReport from '@/components/MonthlyReport';
 
 interface AppData {
   entries: HourEntry[];
@@ -40,7 +41,7 @@ export default function Dashboard() {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table' | 'reports'>('dashboard');
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [showNewCompanyForm, setShowNewCompanyForm] = useState(false);
@@ -475,6 +476,16 @@ export default function Dashboard() {
               }`}
             >
               Gestión de Registros
+            </button>
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'reports'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-700 hover:text-gray-800 hover:border-gray-300'
+              }`}
+            >
+              Reportes PDF
             </button>
           </div>
         </div>
@@ -1030,6 +1041,12 @@ export default function Dashboard() {
             defaultCompanyId={selectedCompany?.id}
             projects={projects}
             defaultProjectId={selectedProjectId}
+          />
+        )}
+
+        {activeTab === 'reports' && (
+          <MonthlyReport
+            companies={data?.companies || []}
           />
         )}
       </div>

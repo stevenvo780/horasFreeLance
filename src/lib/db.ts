@@ -450,6 +450,23 @@ class Database {
     }));
   }
 
+  async getEntriesByDateRange(companyId: number, startDate: string, endDate: string): Promise<HourEntry[]> {
+    const client = this.getClient();
+    const result = await client.execute({
+      sql: 'SELECT * FROM hour_entries WHERE company_id = ? AND date >= ? AND date <= ? ORDER BY date ASC, id ASC',
+      args: [companyId, startDate, endDate]
+    });
+    
+    return result.rows.map((row: Record<string, unknown>) => ({
+      id: Number(row.id),
+      date: String(row.date),
+      hours: Number(row.hours),
+      description: String(row.description) || '',
+      company_id: Number(row.company_id),
+      project_id: row.project_id != null ? Number(row.project_id) : null
+    }));
+  }
+
   async updateEntry(id: number, date: string, hours: number, description: string, projectId?: number | null): Promise<void> {
     const client = this.getClient();
     if (typeof projectId === 'undefined') {
