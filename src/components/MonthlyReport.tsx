@@ -90,9 +90,9 @@ export default function MonthlyReport({ companies }: MonthlyReportProps) {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
+    return new Intl.NumberFormat('es-CO', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'COP'
     }).format(amount);
   };
 

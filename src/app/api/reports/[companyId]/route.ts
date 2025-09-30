@@ -57,9 +57,8 @@ export async function GET(
       } as ApiResponse, { status: 404 });
     }
 
-    // Obtener configuración de tarifa
-    const settings = await db.getSettings();
-    const hourlyRate = settings?.hourly_rate || 0;
+    // Obtener tarifa de la empresa
+    const hourlyRate = company.hourly_rate || 0;
 
     // Obtener todos los proyectos de la empresa
     const projects = await db.getCompanyProjects(companyId);
