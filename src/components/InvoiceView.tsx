@@ -51,7 +51,7 @@ export default function InvoiceView({ invoice, onStatusChange, onClose, printMod
   const status = statusLabels[invoice.status];
 
   return (
-    <div className="bg-white rounded-lg shadow-xl max-w-4xl mx-auto print:shadow-none print:max-w-full">
+    <div className="bg-white rounded-lg shadow-xl max-w-4xl mx-auto invoice-print-container print:shadow-none print:max-w-full print:rounded-none">
       {/* Header con controles (ocultos en impresión) */}
       {!printMode && (
         <div className="flex justify-between items-center p-4 border-b print:hidden">

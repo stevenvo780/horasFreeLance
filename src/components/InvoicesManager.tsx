@@ -229,11 +229,15 @@ export default function InvoicesManager({
 
   if (selectedInvoice) {
     return (
-      <InvoiceView
-        invoice={selectedInvoice}
-        onStatusChange={handleStatusChange}
-        onClose={() => setSelectedInvoice(null)}
-      />
+      <div className="fixed inset-0 bg-gray-100 z-50 overflow-auto print:bg-white print:static">
+        <div className="min-h-screen py-6 px-4 print:py-0 print:px-0">
+          <InvoiceView
+            invoice={selectedInvoice}
+            onStatusChange={handleStatusChange}
+            onClose={() => setSelectedInvoice(null)}
+          />
+        </div>
+      </div>
     );
   }
 
