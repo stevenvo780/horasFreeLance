@@ -930,6 +930,14 @@ class Database {
     });
   }
 
+  async updateInvoiceSignature(id: number, signatureImage: string | null): Promise<void> {
+    const client = this.getClient();
+    await client.execute({
+      sql: 'UPDATE invoices SET issuer_signature_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      args: [signatureImage, id]
+    });
+  }
+
   async deleteInvoice(id: number): Promise<void> {
     const client = this.getClient();
     // Items se eliminan automáticamente por CASCADE

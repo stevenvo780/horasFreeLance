@@ -53,7 +53,7 @@ export async function GET(
   }
 }
 
-// PATCH - Actualizar estado de la cuenta de cobro
+// PATCH - Actualizar estado o firma de la cuenta de cobro
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ invoiceId: string }> }
@@ -78,14 +78,6 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const newStatus = body.status as InvoiceStatus;
-
-    if (!newStatus || !['draft', 'sent', 'paid', 'cancelled'].includes(newStatus)) {
-      return NextResponse.json({
-        status: 'error',
-        message: 'Estado inválido. Valores permitidos: draft, sent, paid, cancelled'
-      } as ApiResponse, { status: 400 });
-    }
 
     await initializeDatabase();
     const db = getDatabase();
@@ -99,13 +91,36 @@ export async function PATCH(
       } as ApiResponse, { status: 404 });
     }
 
-    await db.updateInvoiceStatus(invoiceIdNum, newStatus);
+    // Actualizar estado si se proporciona
+    if (body.status) {
+      const newStatus = body.status as InvoiceStatus;
+      if (!['draft', 'sent', 'paid', 'cancelled'].includes(newStatus)) {
+        return NextResponse.json({
+          status: 'error',
+          message: 'Estado inválido. Valores permitidos: draft, sent, paid, cancelled'
+        } as ApiResponse, { status: 400 });
+      }
+      await db.updateInvoiceStatus(invoiceIdNum, newStatus);
+    }
+
+    // Actualizar firma si se proporciona
+    if (body.issuer_signature_image !== undefined) {
+      await db.updateInvoiceSignature(invoiceIdNum, body.issuer_signature_image);
+    }
+
+    // Si se pide refrescar la firma desde los datos del usuario
+    if (body.refresh_signature) {
+      const userBillingInfo = await db.getUserBillingInfo(userId);
+      if (userBillingInfo?.signature_image) {
+        await db.updateInvoiceSignature(invoiceIdNum, userBillingInfo.signature_image);
+      }
+    }
 
     const updated = await db.getInvoiceById(invoiceIdNum);
 
     return NextResponse.json({
       status: 'ok',
-      message: 'Estado actualizado',
+      message: 'Cuenta de cobro actualizada',
       data: updated
     } as ApiResponse);
   } catch (error) {
