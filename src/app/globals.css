@@ -53,109 +53,88 @@ input::placeholder, textarea::placeholder {
   /* Configuración de página */
   @page {
     size: letter;
-    margin: 12mm 10mm;
+    margin: 10mm 8mm;
   }
 
   html, body {
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
   }
 
-  /* Ocultar TODOS los elementos de UI excepto la factura */
-  body > div > div > header,
-  body > div > div > nav,
-  body > div > div > div > header,
-  body > div > div > div > nav,
-  header[class*="banner"],
-  nav,
-  [role="navigation"],
-  [role="banner"],
-  button,
-  .print\\:hidden {
-    display: none !important;
-    visibility: hidden !important;
+  /* OCULTAR ABSOLUTAMENTE TODO primero */
+  body * {
+    visibility: hidden;
   }
 
-  /* El overlay de la factura debe ocupar toda la página */
-  .fixed.inset-0 {
-    position: static !important;
-    background: white !important;
-    overflow: visible !important;
-    z-index: auto !important;
+  /* MOSTRAR solo el contenedor de factura y su contenido */
+  .invoice-print-container,
+  .invoice-print-container * {
+    visibility: visible !important;
   }
 
-  /* Contenedor principal de factura */
+  /* El contenedor de factura debe estar en la raíz */
   .invoice-print-container {
-    position: relative !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 20px !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     background: white !important;
     border: none !important;
   }
 
-  /* Contenido de la factura */
-  .invoice-print-container > div:last-child {
-    padding: 0 !important;
-  }
-
-  /* Header de controles de factura - ocultar */
-  .invoice-print-container > div:first-child:has(button) {
+  /* Ocultar los controles de la factura */
+  .invoice-print-container > div:first-child {
     display: none !important;
   }
 
-  /* Asegurar colores en impresión */
-  .invoice-print-container .bg-gray-800,
+  /* Asegurar colores de fondo en impresión */
   .bg-gray-800 {
     background-color: #1f2937 !important;
     color: white !important;
   }
 
-  .invoice-print-container .bg-gray-100,
   .bg-gray-100 {
     background-color: #f3f4f6 !important;
   }
 
-  .invoice-print-container .bg-gray-50,
   .bg-gray-50 {
     background-color: #f9fafb !important;
   }
 
-  /* Evitar saltos de página dentro de elementos importantes */
-  table, footer, .mb-6, .mb-8 {
+  /* Evitar saltos de página */
+  table, footer {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   /* Tamaños de texto para impresión */
-  h1 { font-size: 22pt !important; }
-  h2 { font-size: 16pt !important; }
-  h3 { font-size: 12pt !important; }
-  p, span, td, th { font-size: 10pt !important; }
+  h1 { font-size: 20pt !important; }
+  h3 { font-size: 11pt !important; }
+  p, span, td, th { font-size: 9pt !important; }
 
-  /* Total destacado */
+  /* Total */
   .text-2xl.font-bold {
-    font-size: 16pt !important;
+    font-size: 14pt !important;
   }
 
-  /* Firma visible y centrada */
+  /* Firma */
   img[alt="Firma"] {
-    max-height: 50px !important;
+    max-height: 45px !important;
     width: auto !important;
   }
 
-  /* Espaciado compacto para impresión */
+  /* Espaciado compacto */
   .p-6, .md\\:p-8 {
-    padding: 16px !important;
+    padding: 12px !important;
   }
 
-  .mb-6 { margin-bottom: 12px !important; }
-  .mb-8 { margin-bottom: 16px !important; }
-  .gap-6 { gap: 12px !important; }
+  .mb-6 { margin-bottom: 10px !important; }
+  .mb-8 { margin-bottom: 14px !important; }
+  .gap-6 { gap: 10px !important; }
 }

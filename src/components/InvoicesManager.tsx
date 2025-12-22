@@ -229,8 +229,8 @@ export default function InvoicesManager({
 
   if (selectedInvoice) {
     return (
-      <div className="fixed inset-0 bg-gray-100 z-50 overflow-auto print:bg-white print:static">
-        <div className="min-h-screen py-6 px-4 print:py-0 print:px-0">
+      <div className="fixed inset-0 bg-gray-100 z-[9999] overflow-auto print:static print:bg-white print:z-auto print:overflow-visible">
+        <div className="min-h-screen py-6 px-4 print:min-h-0 print:py-0 print:px-0">
           <InvoiceView
             invoice={selectedInvoice}
             onStatusChange={handleStatusChange}
