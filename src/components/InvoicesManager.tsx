@@ -42,8 +42,9 @@ export default function InvoicesManager({
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [userBillingInfo, setUserBillingInfo] = useState<UserBillingInfo | null>(null);
-  const [companyBillingInfo, setCompanyBillingInfo] = useState<CompanyBillingInfo | null>(null);
+  const [companyBillingInfoMap, setCompanyBillingInfoMap] = useState<Record<number, CompanyBillingInfo | null>>({});
   const [expandedCompanySettings, setExpandedCompanySettings] = useState<number | null>(null);
+  const [loadingCompanyBilling, setLoadingCompanyBilling] = useState<number | null>(null);
 
   // Cargar facturas
   const fetchInvoices = useCallback(async () => {
@@ -83,13 +84,19 @@ export default function InvoicesManager({
   // Cargar billing info de empresa
   const fetchCompanyBillingInfo = useCallback(async (companyId: number) => {
     try {
+      setLoadingCompanyBilling(companyId);
       const response = await authFetch(`/api/companies/${companyId}/billing-info`);
       const data = await response.json();
       if (data.status === 'ok') {
-        setCompanyBillingInfo(data.data?.billing_info || null);
+        setCompanyBillingInfoMap(prev => ({
+          ...prev,
+          [companyId]: data.data?.billing_info || null
+        }));
       }
     } catch (err) {
       console.error('Error fetching company billing info:', err);
+    } finally {
+      setLoadingCompanyBilling(null);
     }
   }, [authFetch]);
 
@@ -99,10 +106,17 @@ export default function InvoicesManager({
   }, [fetchInvoices, fetchUserBillingInfo]);
 
   useEffect(() => {
-    if (selectedCompanyId) {
+    if (selectedCompanyId && !(selectedCompanyId in companyBillingInfoMap)) {
       fetchCompanyBillingInfo(selectedCompanyId);
     }
-  }, [selectedCompanyId, fetchCompanyBillingInfo]);
+  }, [selectedCompanyId, fetchCompanyBillingInfo, companyBillingInfoMap]);
+
+  // Cargar billing info al expandir empresa en configuración
+  useEffect(() => {
+    if (expandedCompanySettings && !(expandedCompanySettings in companyBillingInfoMap)) {
+      fetchCompanyBillingInfo(expandedCompanySettings);
+    }
+  }, [expandedCompanySettings, fetchCompanyBillingInfo, companyBillingInfoMap]);
 
   // Crear cuenta de cobro
   const handleCreateInvoice = async (data: CreateInvoiceFromHoursRequest) => {
@@ -198,9 +212,10 @@ export default function InvoicesManager({
       throw new Error(result.message);
     }
     
-    if (companyId === selectedCompanyId) {
-      setCompanyBillingInfo(result.data);
-    }
+    setCompanyBillingInfoMap(prev => ({
+      ...prev,
+      [companyId]: result.data
+    }));
   };
 
   // Stats
@@ -314,8 +329,9 @@ export default function InvoicesManager({
                       <CompanyBillingForm
                         companyId={company.id!}
                         companyName={company.name}
-                        billingInfo={company.id === selectedCompanyId ? companyBillingInfo : null}
+                        billingInfo={companyBillingInfoMap[company.id!] || null}
                         onSave={(data) => handleSaveCompanyBillingInfo(company.id!, data)}
+                        loading={loadingCompanyBilling === company.id}
                       />
                     </div>
                   )}
