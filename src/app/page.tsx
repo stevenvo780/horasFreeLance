@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import BulkHoursTable from '@/components/BulkHoursTable';
 import MonthlyReport from '@/components/MonthlyReport';
+import InvoicesManager from '@/components/InvoicesManager';
 
 interface AppData {
   entries: HourEntry[];
@@ -41,7 +42,7 @@ export default function Dashboard() {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table' | 'reports'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'bulk-table' | 'reports' | 'invoices'>('dashboard');
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [showNewCompanyForm, setShowNewCompanyForm] = useState(false);
@@ -486,6 +487,16 @@ export default function Dashboard() {
               }`}
             >
               Reportes PDF
+            </button>
+            <button
+              onClick={() => setActiveTab('invoices')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'invoices'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-700 hover:text-gray-800 hover:border-gray-300'
+              }`}
+            >
+              Cuentas de Cobro
             </button>
           </div>
         </div>
@@ -1047,6 +1058,15 @@ export default function Dashboard() {
         {activeTab === 'reports' && (
           <MonthlyReport
             companies={data?.companies || []}
+          />
+        )}
+
+        {activeTab === 'invoices' && (
+          <InvoicesManager
+            companies={data?.companies || []}
+            projects={data?.projects || []}
+            selectedCompanyId={selectedCompanyId}
+            onDataChange={() => fetchData()}
           />
         )}
       </div>
