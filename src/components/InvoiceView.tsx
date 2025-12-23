@@ -27,8 +27,18 @@ export default function InvoiceView({ invoice, onStatusChange, onClose, printMod
   const [loading, setLoading] = useState(false);
 
   const handlePrint = useCallback(() => {
+    // Cambiar título temporalmente para que el PDF tenga el nombre correcto
+    const originalTitle = document.title;
+    const clientName = invoice.client_name.replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+    document.title = `Cuenta_Cobro_${invoice.number}_${clientName}`;
+    
     window.print();
-  }, []);
+    
+    // Restaurar título después de un pequeño delay
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  }, [invoice.number, invoice.client_name]);
 
   const handleStatusChange = useCallback(async (newStatus: InvoiceStatus) => {
     if (!onStatusChange) return;
