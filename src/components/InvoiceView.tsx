@@ -113,7 +113,7 @@ export default function InvoiceView({ invoice, onStatusChange, onClose, printMod
         </header>
 
         {/* Información de facturación */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 mb-8">
           {/* DEBE A (Emisor) */}
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
@@ -128,8 +128,8 @@ export default function InvoiceView({ invoice, onStatusChange, onClose, printMod
           </div>
 
           {/* PARA (Cliente) */}
-          <div className="md:text-right">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1 md:justify-end">
+          <div className="md:text-right print:text-right">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1 md:justify-end print:justify-end">
               <Building2 className="w-4 h-4" />
               PARA
             </h3>
@@ -139,20 +139,20 @@ export default function InvoiceView({ invoice, onStatusChange, onClose, printMod
             {invoice.client_city && <p className="text-gray-600">{invoice.client_city}</p>}
             
             <div className="mt-3 space-y-1">
-              <div className="flex items-center gap-2 md:justify-end">
+              <div className="flex items-center gap-2 md:justify-end print:justify-end">
                 <span className="text-sm text-gray-500">Fecha de Emisión:</span>
                 <span className="font-medium text-gray-700">
                   {new Date(invoice.issue_date + 'T00:00:00').toLocaleDateString('es-CO')}
                 </span>
               </div>
-              <div className="flex items-center gap-2 md:justify-end">
+              <div className="flex items-center gap-2 md:justify-end print:justify-end">
                 <span className="text-sm text-gray-500">Periodo:</span>
                 <span className="font-medium text-gray-700">
                   {formatPeriod(invoice.period_start, invoice.period_end)}
                 </span>
               </div>
               {invoice.project_name && (
-                <div className="flex items-center gap-2 md:justify-end">
+                <div className="flex items-center gap-2 md:justify-end print:justify-end">
                   <span className="text-sm text-gray-500">Proyecto:</span>
                   <span className="font-medium text-gray-700">{invoice.project_name}</span>
                 </div>

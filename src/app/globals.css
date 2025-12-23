@@ -137,4 +137,18 @@ input::placeholder, textarea::placeholder {
   .mb-6 { margin-bottom: 10px !important; }
   .mb-8 { margin-bottom: 14px !important; }
   .gap-6 { gap: 10px !important; }
+
+  /* FORZAR GRID DE 2 COLUMNAS EN IMPRESIÓN */
+  .print\\:grid-cols-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .print\\:text-right {
+    text-align: right !important;
+  }
+
+  .print\\:justify-end {
+    justify-content: flex-end !important;
+  }
 }
